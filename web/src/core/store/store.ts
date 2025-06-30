@@ -112,6 +112,7 @@ export async function sendMessage(
       max_search_results: settings.maxSearchResults,
       report_style: settings.reportStyle,
       mcp_settings: settings.mcpSettings,
+      custom_prompts: settings.customPrompts,
     },
     options,
   );

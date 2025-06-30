@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "~/components/ui/dialog";
-import { setReportStyle, useSettingsStore } from "~/core/store";
+import { setReportStyle, getActiveFlow } from "~/core/store";
 import { cn } from "~/lib/utils";
 
 import { Tooltip } from "./tooltip";
@@ -47,12 +47,13 @@ const REPORT_STYLES = [
 
 export function ReportStyleDialog() {
   const [open, setOpen] = useState(false);
-  const currentStyle = useSettingsStore((state) => state.general.reportStyle);
+  const activeFlow = getActiveFlow();
+  const currentStyle = activeFlow.generalSettings.reportStyle;
 
   const handleStyleChange = (
     style: "academic" | "popular_science" | "news" | "social_media",
   ) => {
-    setReportStyle(style);
+    setReportStyle(style, activeFlow.id);
     setOpen(false);
   };
 
@@ -79,10 +80,12 @@ export function ReportStyleDialog() {
       >
         <DialogTrigger asChild>
           <Button
-            className="!border-brand !text-brand rounded-2xl"
+            className="!border-brand !text-brand rounded-2xl text-xs px-3 h-8"
             variant="outline"
           >
-            <CurrentIcon className="h-4 w-4" /> {currentStyleConfig.label}
+            <CurrentIcon className="h-3 w-3" /> 
+            <span className="hidden sm:inline ml-1">{currentStyleConfig.label}</span>
+            <span className="sm:hidden ml-1">Style</span>
           </Button>
         </DialogTrigger>
       </Tooltip>

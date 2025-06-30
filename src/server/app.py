@@ -11,7 +11,7 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
-from langchain_core.messages import AIMessageChunk, ToolMessage, BaseMessage
+from langchain_core.messages import AIMessageChunk, ToolMessage, BaseMessage, HumanMessage
 from langgraph.types import Command
 
 from src.config.report_style import ReportStyle
@@ -83,6 +83,7 @@ async def chat_stream(request: ChatRequest):
             request.enable_background_investigation,
             request.report_style,
             request.enable_deep_thinking,
+            request.custom_prompts,
         ),
         media_type="text/event-stream",
     )
@@ -101,7 +102,12 @@ async def _astream_workflow_generator(
     enable_background_investigation: bool,
     report_style: ReportStyle,
     enable_deep_thinking: bool,
+    custom_prompts: dict = None,
 ):
+    # Import Command here to avoid circular imports
+    from langgraph.types import Command
+    
+    # Proper input structure based on State class
     input_ = {
         "messages": messages,
         "plan_iterations": 0,
@@ -112,23 +118,29 @@ async def _astream_workflow_generator(
         "enable_background_investigation": enable_background_investigation,
         "research_topic": messages[-1]["content"] if messages else "",
     }
+    
+    # Handle interrupt feedback - if provided and plan is not auto-accepted, create Command
     if not auto_accepted_plan and interrupt_feedback:
         resume_msg = f"[{interrupt_feedback}]"
         # add the last message to the resume message
         if messages:
             resume_msg += f" {messages[-1]['content']}"
         input_ = Command(resume=resume_msg)
+
     async for agent, _, event_data in graph.astream(
         input_,
         config={
-            "thread_id": thread_id,
-            "resources": resources,
-            "max_plan_iterations": max_plan_iterations,
-            "max_step_num": max_step_num,
-            "max_search_results": max_search_results,
-            "mcp_settings": mcp_settings,
-            "report_style": report_style.value,
-            "enable_deep_thinking": enable_deep_thinking,
+            "configurable": {
+                "thread_id": thread_id,
+                "resources": resources,
+                "max_plan_iterations": max_plan_iterations,
+                "max_step_num": max_step_num,
+                "max_search_results": max_search_results,
+                "mcp_settings": mcp_settings,
+                "report_style": report_style.value,
+                "enable_deep_thinking": enable_deep_thinking,
+                "custom_prompts": custom_prompts,
+            }
         },
         stream_mode=["messages", "updates"],
         subgraphs=True,

@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -64,6 +64,9 @@ class ChatRequest(BaseModel):
     )
     enable_deep_thinking: Optional[bool] = Field(
         False, description="Whether to enable deep thinking"
+    )
+    custom_prompts: Optional[Dict[str, str]] = Field(
+        None, description="Custom prompts for agents"
     )
 
 

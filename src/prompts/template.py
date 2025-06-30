@@ -4,8 +4,8 @@
 import os
 import dataclasses
 from datetime import datetime
-from jinja2 import Environment, FileSystemLoader, select_autoescape
-from langgraph.prebuilt.chat_agent_executor import AgentState
+from typing import Optional
+from jinja2 import Environment, FileSystemLoader, select_autoescape, Template
 from src.config.configuration import Configuration
 
 # Initialize Jinja2 environment
@@ -35,7 +35,7 @@ def get_prompt_template(prompt_name: str) -> str:
 
 
 def apply_prompt_template(
-    prompt_name: str, state: AgentState, configurable: Configuration = None
+    prompt_name: str, state: dict, configurable: Optional[Configuration] = None
 ) -> list:
     """
     Apply template variables to a prompt template and return formatted messages.
@@ -43,6 +43,7 @@ def apply_prompt_template(
     Args:
         prompt_name: Name of the prompt template to use
         state: Current agent state containing variables to substitute
+        configurable: Configuration object with custom prompts (optional)
 
     Returns:
         List of messages with the system prompt as the first message
@@ -58,6 +59,18 @@ def apply_prompt_template(
         state_vars.update(dataclasses.asdict(configurable))
 
     try:
+        # Check if we have custom prompts from configuration
+        custom_prompts = getattr(configurable, 'custom_prompts', None) if configurable else None
+        
+        if custom_prompts and prompt_name in custom_prompts:
+            # Use custom prompt from settings
+            custom_prompt_content = custom_prompts[prompt_name]
+            if custom_prompt_content and custom_prompt_content.strip():
+                template = Template(custom_prompt_content)
+                system_prompt = template.render(**state_vars)
+                return [{"role": "system", "content": system_prompt}] + state["messages"]
+        
+        # Fall back to default template file
         template = env.get_template(f"{prompt_name}.md")
         system_prompt = template.render(**state_vars)
         return [{"role": "system", "content": system_prompt}] + state["messages"]
