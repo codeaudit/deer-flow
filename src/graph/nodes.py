@@ -324,13 +324,30 @@ async def _execute_agent_step(
 
     logger.info(f"Executing step: {current_step.title}, agent: {agent_name}")
 
-    # Format completed steps information
+    # Format completed steps information with context management
     completed_steps_info = ""
     if completed_steps:
         completed_steps_info = "# Existing Research Findings\n\n"
-        for i, step in enumerate(completed_steps):
-            completed_steps_info += f"## Existing Finding {i + 1}: {step.title}\n\n"
-            completed_steps_info += f"<finding>\n{step.execution_res}\n</finding>\n\n"
+        
+        # Context window management: limit to last 2 steps and truncate content
+        max_steps_to_include = 2
+        max_chars_per_finding = 1500  # Limit each finding to reasonable size
+        
+        # Get the most recent completed steps
+        recent_steps = completed_steps[-max_steps_to_include:] if len(completed_steps) > max_steps_to_include else completed_steps
+        
+        for i, step in enumerate(recent_steps):
+            # Truncate execution result if too long
+            execution_content = step.execution_res or ""
+            if len(execution_content) > max_chars_per_finding:
+                execution_content = execution_content[:max_chars_per_finding] + "\n\n[Content truncated for context management...]"
+            
+            completed_steps_info += f"## Recent Finding {i + 1}: {step.title}\n\n"
+            completed_steps_info += f"<finding>\n{execution_content}\n</finding>\n\n"
+        
+        # Add summary if we truncated steps
+        if len(completed_steps) > max_steps_to_include:
+            completed_steps_info += f"*Note: Showing {max_steps_to_include} most recent findings. {len(completed_steps) - max_steps_to_include} earlier findings completed.*\n\n"
 
     # Prepare the input for the agent with completed steps info
     agent_input = {

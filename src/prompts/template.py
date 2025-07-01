@@ -58,6 +58,17 @@ def apply_prompt_template(
     if configurable:
         state_vars.update(dataclasses.asdict(configurable))
 
+    # Context window management for messages
+    messages = state.get("messages", [])
+    max_messages = 20  # Limit conversation history
+    if len(messages) > max_messages:
+        # Keep first few messages (important context) and recent messages
+        important_messages = messages[:3]  # Keep initial context
+        recent_messages = messages[-(max_messages-3):]  # Keep recent conversation
+        truncated_messages = important_messages + recent_messages
+        print(f"Context management: Truncated messages from {len(messages)} to {len(truncated_messages)}")
+        messages = truncated_messages
+
     try:
         # Check if we have custom prompts from configuration
         custom_prompts = getattr(configurable, 'custom_prompts', None) if configurable else None
@@ -68,11 +79,11 @@ def apply_prompt_template(
             if custom_prompt_content and custom_prompt_content.strip():
                 template = Template(custom_prompt_content)
                 system_prompt = template.render(**state_vars)
-                return [{"role": "system", "content": system_prompt}] + state["messages"]
+                return [{"role": "system", "content": system_prompt}] + messages
         
         # Fall back to default template file
         template = env.get_template(f"{prompt_name}.md")
         system_prompt = template.render(**state_vars)
-        return [{"role": "system", "content": system_prompt}] + state["messages"]
+        return [{"role": "system", "content": system_prompt}] + messages
     except Exception as e:
         raise ValueError(f"Error applying template {prompt_name}: {e}")

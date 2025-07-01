@@ -25,7 +25,7 @@ Successfully implemented a comprehensive flow management system for DeerFlow tha
 
 **1.3 Backend API Updates** ✅
 - ✅ Backend already supported `custom_prompts` from previous implementation
-- ✅ Updated `getChatStreamSettings()` to return active flow settings
+- ✅ Updated `getChatStreamSettings()` to return active flow settin gs
 - ✅ General settings now come from active flow
 
 ### **Phase 2: Settings UI Restructure** ✅

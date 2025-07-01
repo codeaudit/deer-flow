@@ -23,7 +23,10 @@ import {
   getAllFlows,
   setPrompt,
   resetPrompt,
-  resetAllPrompts
+  resetAllPrompts,
+  fixBrokenTemplates,
+  fixPlannerJsonFormat,
+  useSettingsStore
 } from "~/core/store";
 
 import type { Tab } from "./types";
@@ -56,11 +59,11 @@ export const FlowLibraryTab: Tab = ({
       setSelectedFlowId(newFlow.id);
       setNewFlowName("");
       setIsCreatingFlow(false);
-      // Update parent state
-      const updatedSettings = { ...settings };
+      // Get fresh settings from store after creating the flow
+      const updatedSettings = useSettingsStore.getState();
       onChange(updatedSettings);
     }
-  }, [newFlowName, settings, onChange]);
+  }, [newFlowName, onChange]);
 
   const handleDeleteFlow = useCallback((flowId: string) => {
     if (window.confirm("Are you sure you want to delete this flow? This action cannot be undone.")) {
@@ -68,67 +71,67 @@ export const FlowLibraryTab: Tab = ({
       // If deleting selected flow, select first available
       if (selectedFlowId === flowId) {
         const remainingFlows = getAllFlows().filter(f => f.id !== flowId);
-        setSelectedFlowId(remainingFlows[0]?.id || "default");
+        setSelectedFlowId(remainingFlows[0]?.id ?? "default");
       }
-      const updatedSettings = { ...settings };
+      const updatedSettings = useSettingsStore.getState();
       onChange(updatedSettings);
     }
-  }, [selectedFlowId, settings, onChange]);
+  }, [selectedFlowId, onChange]);
 
   const handleDuplicateFlow = useCallback((flow: Flow) => {
     const duplicatedFlow = createFlow(`${flow.name} (Copy)`, flow);
     setSelectedFlowId(duplicatedFlow.id);
-    const updatedSettings = { ...settings };
+    const updatedSettings = useSettingsStore.getState();
     onChange(updatedSettings);
-  }, [settings, onChange]);
+  }, [onChange]);
 
   const handleSetActiveFlow = useCallback((flowId: string) => {
     setActiveFlow(flowId);
-    const updatedSettings = { ...settings };
+    const updatedSettings = useSettingsStore.getState();
     onChange(updatedSettings);
-  }, [settings, onChange]);
+  }, [onChange]);
 
   const handleFlowInfoUpdate = useCallback((updates: Partial<Flow>) => {
     if (selectedFlow) {
       updateFlow(selectedFlow.id, updates);
-      const updatedSettings = { ...settings };
+      const updatedSettings = useSettingsStore.getState();
       onChange(updatedSettings);
     }
-  }, [selectedFlow, settings, onChange]);
+  }, [selectedFlow, onChange]);
 
   const handleGeneralSettingUpdate = useCallback((key: keyof Flow["generalSettings"], value: unknown) => {
     if (selectedFlow) {
       updateFlow(selectedFlow.id, {
         generalSettings: { ...selectedFlow.generalSettings, [key]: value }
       });
-      const updatedSettings = { ...settings };
+      const updatedSettings = useSettingsStore.getState();
       onChange(updatedSettings);
     }
-  }, [selectedFlow, settings, onChange]);
+  }, [selectedFlow, onChange]);
 
   const handlePromptChange = useCallback((agentName: keyof Flow["prompts"], content: string) => {
     if (selectedFlow) {
       setPrompt(agentName, content, selectedFlow.id);
-      const updatedSettings = { ...settings };
+      const updatedSettings = useSettingsStore.getState();
       onChange(updatedSettings);
     }
-  }, [selectedFlow, settings, onChange]);
+  }, [selectedFlow, onChange]);
 
   const handleResetPrompt = useCallback((agentName: keyof Flow["prompts"]) => {
     if (selectedFlow) {
       resetPrompt(agentName, selectedFlow.id);
-      const updatedSettings = { ...settings };
+      const updatedSettings = useSettingsStore.getState();
       onChange(updatedSettings);
     }
-  }, [selectedFlow, settings, onChange]);
+  }, [selectedFlow, onChange]);
 
   const handleResetAllPrompts = useCallback(() => {
     if (selectedFlow && window.confirm("Are you sure you want to reset all prompts to default? This action cannot be undone.")) {
       resetAllPrompts(selectedFlow.id);
-      const updatedSettings = { ...settings };
+      const updatedSettings = useSettingsStore.getState();
       onChange(updatedSettings);
     }
-  }, [selectedFlow, settings, onChange]);
+  }, [selectedFlow, onChange]);
 
   const toggleAgent = useCallback((agentName: string) => {
     setExpandedAgent(prev => prev === agentName ? null : agentName);
@@ -139,9 +142,9 @@ export const FlowLibraryTab: Tab = ({
   }
 
   return (
-    <div className="flex h-full gap-6">
+    <div className="flex h-full gap-8">
       {/* Left Sidebar - Flow List */}
-      <div className="w-80 flex flex-col gap-4">
+      <div className="w-96 flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Flow Library</h2>
           <Button
@@ -258,7 +261,7 @@ export const FlowLibraryTab: Tab = ({
       </div>
 
       {/* Right Panel - Flow Editor */}
-      <div className="flex-1 space-y-6 overflow-auto">
+      <div className="flex-1 space-y-8 overflow-auto">
         {/* Flow Info Section */}
         <div className="space-y-4">
           <h2 className="text-lg font-semibold">Flow Configuration</h2>
@@ -278,7 +281,7 @@ export const FlowLibraryTab: Tab = ({
               <Label htmlFor="flow-description">Description</Label>
               <Textarea
                 id="flow-description"
-                value={selectedFlow.description || ""}
+                value={selectedFlow.description ?? ""}
                 onChange={(e) => handleFlowInfoUpdate({ description: e.target.value })}
                 placeholder="Describe what this flow is used for..."
                 className="min-h-20"
@@ -395,24 +398,60 @@ export const FlowLibraryTab: Tab = ({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold">Agent Prompts</h3>
-            <Tooltip title="Reset all prompts to default">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleResetAllPrompts}
-                className="gap-2"
-              >
-                <RotateCcw className="h-4 w-4" />
-                Reset All
-              </Button>
-            </Tooltip>
+            <div className="flex gap-2">
+              <Tooltip title="Fix broken Jinja2 templates causing network errors">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => {
+                    if (selectedFlow && window.confirm("This will reset all prompts to fix template syntax errors. Continue?")) {
+                      fixBrokenTemplates(selectedFlow.id);
+                      const updatedSettings = useSettingsStore.getState();
+                      onChange(updatedSettings);
+                    }
+                  }}
+                  className="gap-2"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Fix Templates
+                </Button>
+              </Tooltip>
+              <Tooltip title="Fix planner JSON format issue (most common fix)">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => {
+                    if (selectedFlow && window.confirm("This will update your planner prompt to fix JSON format errors. Continue?")) {
+                      fixPlannerJsonFormat(selectedFlow.id);
+                      const updatedSettings = useSettingsStore.getState();
+                      onChange(updatedSettings);
+                    }
+                  }}
+                  className="gap-2"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Fix JSON
+                </Button>
+              </Tooltip>
+              <Tooltip title="Reset all prompts to default">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResetAllPrompts}
+                  className="gap-2"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Reset All
+                </Button>
+              </Tooltip>
+            </div>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-6">
             {Object.entries(selectedFlow.prompts).map(([agentName, prompt]) => (
               <div
                 key={agentName}
-                className="border rounded-lg p-4 bg-card"
+                className="border rounded-lg p-6 bg-card shadow-sm"
               >
                 <div 
                   className="flex items-center justify-between cursor-pointer"
@@ -455,7 +494,7 @@ export const FlowLibraryTab: Tab = ({
                 </div>
 
                 {expandedAgent === agentName && (
-                  <div className="mt-4 space-y-3">
+                  <div className="mt-6 space-y-4">
                     <Label htmlFor={`prompt-${agentName}`}>
                       Prompt Content
                     </Label>
@@ -469,7 +508,7 @@ export const FlowLibraryTab: Tab = ({
                         )
                       }
                       placeholder={`Enter the system prompt for the ${agentName} agent...`}
-                      className="min-h-96 font-mono text-sm"
+                      className="min-h-[600px] font-mono text-sm leading-relaxed"
                       style={{
                         resize: "vertical",
                       }}
