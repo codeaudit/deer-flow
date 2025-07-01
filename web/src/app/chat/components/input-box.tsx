@@ -4,8 +4,9 @@
 import { MagicWandIcon } from "@radix-ui/react-icons";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowUp, Lightbulb, X } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
+import { FlowSelector } from "~/components/deer-flow/flow-selector";
 import { Detective } from "~/components/deer-flow/icons/detective";
 import MessageInput, {
   type MessageInputRef,
@@ -20,7 +21,7 @@ import type { Option, Resource } from "~/core/messages";
 import {
   setEnableDeepThinking,
   setEnableBackgroundInvestigation,
-  useSettingsStore,
+  getActiveFlow,
 } from "~/core/store";
 import { cn } from "~/lib/utils";
 
@@ -46,14 +47,11 @@ export function InputBox({
   onCancel?: () => void;
   onRemoveFeedback?: () => void;
 }) {
-  const enableDeepThinking = useSettingsStore(
-    (state) => state.general.enableDeepThinking,
-  );
-  const backgroundInvestigation = useSettingsStore(
-    (state) => state.general.enableBackgroundInvestigation,
-  );
+  const activeFlow = getActiveFlow();
+  const enableDeepThinking = activeFlow.generalSettings.enableDeepThinking;
+  const backgroundInvestigation = activeFlow.generalSettings.enableBackgroundInvestigation;
   const { config, loading } = useConfig();
-  const reportStyle = useSettingsStore((state) => state.general.reportStyle);
+  const reportStyle = activeFlow.generalSettings.reportStyle;
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<MessageInputRef>(null);
   const feedbackRef = useRef<HTMLDivElement>(null);
@@ -210,7 +208,7 @@ export function InputBox({
         />
       </div>
       <div className="flex items-center px-4 py-2">
-        <div className="flex grow gap-2">
+        <div className="flex grow gap-1.5 flex-wrap items-center">
           {config?.models.reasoning?.[0] && (
             <Tooltip
               className="max-w-60"
@@ -229,15 +227,17 @@ export function InputBox({
             >
               <Button
                 className={cn(
-                  "rounded-2xl",
+                  "rounded-2xl text-xs px-3 h-8",
                   enableDeepThinking && "!border-brand !text-brand",
                 )}
                 variant="outline"
                 onClick={() => {
-                  setEnableDeepThinking(!enableDeepThinking);
+                  setEnableDeepThinking(!enableDeepThinking, activeFlow.id);
                 }}
               >
-                <Lightbulb /> Deep Thinking
+                <Lightbulb className="h-3 w-3" /> 
+                <span className="hidden sm:inline ml-1">Deep Thinking</span>
+                <span className="sm:hidden ml-1">Think</span>
               </Button>
             </Tooltip>
           )}
@@ -259,37 +259,40 @@ export function InputBox({
           >
             <Button
               className={cn(
-                "rounded-2xl",
+                "rounded-2xl text-xs px-3 h-8",
                 backgroundInvestigation && "!border-brand !text-brand",
               )}
               variant="outline"
               onClick={() =>
-                setEnableBackgroundInvestigation(!backgroundInvestigation)
+                setEnableBackgroundInvestigation(!backgroundInvestigation, activeFlow.id)
               }
             >
-              <Detective /> Investigation
+              <Detective className="h-3 w-3" /> 
+              <span className="hidden sm:inline ml-1">Investigation</span>
+              <span className="sm:hidden ml-1">Search</span>
             </Button>
           </Tooltip>
           <ReportStyleDialog />
+          <FlowSelector />
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5">
           <Tooltip title="Enhance prompt with AI">
             <Button
               variant="ghost"
               size="icon"
               className={cn(
-                "hover:bg-accent h-10 w-10",
+                "hover:bg-accent h-8 w-8",
                 isEnhancing && "animate-pulse",
               )}
               onClick={handleEnhancePrompt}
               disabled={isEnhancing || currentPrompt.trim() === ""}
             >
               {isEnhancing ? (
-                <div className="flex h-10 w-10 items-center justify-center">
-                  <div className="bg-foreground h-3 w-3 animate-bounce rounded-full opacity-70" />
+                <div className="flex h-8 w-8 items-center justify-center">
+                  <div className="bg-foreground h-2 w-2 animate-bounce rounded-full opacity-70" />
                 </div>
               ) : (
-                <MagicWandIcon className="text-brand" />
+                <MagicWandIcon className="text-brand h-3 w-3" />
               )}
             </Button>
           </Tooltip>
@@ -297,15 +300,15 @@ export function InputBox({
             <Button
               variant="outline"
               size="icon"
-              className={cn("h-10 w-10 rounded-full")}
+              className={cn("h-8 w-8 rounded-full")}
               onClick={() => inputRef.current?.submit()}
             >
               {responding ? (
-                <div className="flex h-10 w-10 items-center justify-center">
-                  <div className="bg-foreground h-4 w-4 rounded-sm opacity-70" />
+                <div className="flex h-8 w-8 items-center justify-center">
+                  <div className="bg-foreground h-3 w-3 rounded-sm opacity-70" />
                 </div>
               ) : (
-                <ArrowUp />
+                <ArrowUp className="h-3 w-3" />
               )}
             </Button>
           </Tooltip>

@@ -211,7 +211,7 @@ def coordinator_node(
     """Coordinator node that communicate with customers."""
     logger.info("Coordinator talking.")
     configurable = Configuration.from_runnable_config(config)
-    messages = apply_prompt_template("coordinator", state)
+    messages = apply_prompt_template("coordinator", state, configurable)
     response = (
         get_llm_by_type(AGENT_LLM_MAP["coordinator"])
         .bind_tools([handoff_to_planner])
@@ -464,11 +464,11 @@ async def _setup_and_execute_agent_step(
                         f"Powered by '{enabled_tools[tool.name]}'.\n{tool.description}"
                     )
                     loaded_tools.append(tool)
-            agent = create_agent(agent_type, agent_type, loaded_tools, agent_type)
+            agent = create_agent(agent_type, agent_type, loaded_tools, agent_type, configurable)
             return await _execute_agent_step(state, agent, agent_type)
     else:
         # Use default tools if no MCP servers are configured
-        agent = create_agent(agent_type, agent_type, default_tools, agent_type)
+        agent = create_agent(agent_type, agent_type, default_tools, agent_type, configurable)
         return await _execute_agent_step(state, agent, agent_type)
 
 
