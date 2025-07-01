@@ -113,6 +113,8 @@ export async function sendMessage(
       report_style: settings.reportStyle,
       mcp_settings: settings.mcpSettings,
       custom_prompts: settings.customPrompts,
+      selected_models: settings.selectedModels,
+      model_parameters: settings.modelParameters,
     },
     options,
   );

@@ -11,7 +11,12 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
-from langchain_core.messages import AIMessageChunk, ToolMessage, BaseMessage, HumanMessage
+from langchain_core.messages import (
+    AIMessageChunk,
+    ToolMessage,
+    BaseMessage,
+    HumanMessage,
+)
 from langgraph.types import Command
 
 from src.config.report_style import ReportStyle
@@ -84,6 +89,8 @@ async def chat_stream(request: ChatRequest):
             request.report_style,
             request.enable_deep_thinking,
             request.custom_prompts,
+            request.selected_models,
+            request.model_parameters,
         ),
         media_type="text/event-stream",
     )
@@ -103,10 +110,12 @@ async def _astream_workflow_generator(
     report_style: ReportStyle,
     enable_deep_thinking: bool,
     custom_prompts: dict = None,
+    selected_models: dict = None,
+    model_parameters: dict = None,
 ):
     # Import Command here to avoid circular imports
     from langgraph.types import Command
-    
+
     # Proper input structure based on State class
     input_ = {
         "messages": messages,
@@ -118,7 +127,7 @@ async def _astream_workflow_generator(
         "enable_background_investigation": enable_background_investigation,
         "research_topic": messages[-1]["content"] if messages else "",
     }
-    
+
     # Handle interrupt feedback - if provided and plan is not auto-accepted, create Command
     if not auto_accepted_plan and interrupt_feedback:
         resume_msg = f"[{interrupt_feedback}]"
@@ -140,6 +149,8 @@ async def _astream_workflow_generator(
                 "report_style": report_style.value,
                 "enable_deep_thinking": enable_deep_thinking,
                 "custom_prompts": custom_prompts,
+                "selected_models": selected_models,
+                "model_parameters": model_parameters,
             }
         },
         stream_mode=["messages", "updates"],
@@ -422,7 +433,18 @@ async def rag_resources(request: Annotated[RAGResourceRequest, Query()]):
 @app.get("/api/config", response_model=ConfigResponse)
 async def config():
     """Get the config of the server."""
+    from src.server.config_request import ModelInfo
+
+    # Convert the model data to the new format
+    raw_models = get_configured_llm_models()
+    formatted_models = {}
+
+    for llm_type, models_list in raw_models.items():
+        formatted_models[llm_type] = [
+            ModelInfo(**model_data) for model_data in models_list
+        ]
+
     return ConfigResponse(
         rag=RAGConfigResponse(provider=SELECTED_RAG_PROVIDER),
-        models=get_configured_llm_models(),
+        models=formatted_models,
     )

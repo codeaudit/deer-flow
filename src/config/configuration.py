@@ -23,11 +23,15 @@ class Configuration:
     report_style: str = ReportStyle.ACADEMIC.value  # Report style
     enable_deep_thinking: bool = False  # Whether to enable deep thinking
     custom_prompts: Optional[Dict[str, str]] = None  # Custom prompts for agents
+    selected_models: Optional[Dict[str, str]] = (
+        None  # Runtime model selection: {"basic": "model_id", "reasoning": "model_id"}
+    )
+    model_parameters: Optional[Dict[str, Dict[str, float]]] = (
+        None  # Model parameters: {"model_id": {"temperature": 0.7, "max_tokens": 2048}}
+    )
 
     @classmethod
-    def from_runnable_config(
-        cls, config: Optional[dict] = None
-    ) -> "Configuration":
+    def from_runnable_config(cls, config: Optional[dict] = None) -> "Configuration":
         """Create a Configuration instance from a RunnableConfig."""
         configurable = (
             config["configurable"] if config and "configurable" in config else {}

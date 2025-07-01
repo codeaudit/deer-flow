@@ -26,6 +26,8 @@ export async function* chatStream(
     enable_background_investigation: boolean;
     report_style?: "academic" | "popular_science" | "news" | "social_media";
     custom_prompts?: Record<string, string>;
+    selected_models?: Record<string, string>;
+    model_parameters?: Record<string, Record<string, number>>;
     mcp_settings?: {
       servers: Record<
         string,

@@ -22,8 +22,57 @@ In DeerFlow, currently we only support non-reasoning models, which means models 
 > A work-around is to set the `Max steps of a research plan` to `2` in the settings dialog located on the top right corner of the web page,
 > or set `max_step_num` to `2` when invoking the API.
 
-### How to switch models?
-You can switch the model in use by modifying the `conf.yaml` file in the root directory of the project, using the configuration in the [litellm format](https://docs.litellm.ai/docs/providers/openai_compatible).
+### How to configure multiple models?
+
+DeerFlow now supports configuring multiple models per type, allowing you to switch between different models during conversations through the web interface.
+
+#### New Multi-Model Configuration Format
+
+```yaml
+# Configure multiple models for basic tasks
+BASIC_MODELS:
+  - id: "gemini-2-flash"
+    name: "Gemini 2.0 Flash"
+    model: "gemini-2.0-flash"
+    base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+    api_key: "your_api_key"
+    provider: "Google"
+    context_window: 1000000
+  - id: "gpt-4o"
+    name: "GPT-4o"
+    model: "gpt-4o"
+    base_url: "https://api.openai.com/v1"
+    api_key: "your_openai_key"
+    provider: "OpenAI"
+    context_window: 128000
+
+# Configure reasoning models (optional)
+REASONING_MODELS:
+  - id: "doubao-thinking"
+    name: "Doubao 1.5 Thinking Pro"
+    model: "doubao-1-5-thinking-pro-m-250428"
+    base_url: "https://ark-cn-beijing.bytedance.net/api/v3"
+    api_key: "your_api_key"
+    provider: "ByteDance"
+    context_window: 32000
+```
+
+#### Legacy Single-Model Support
+
+The legacy format is still supported for backward compatibility:
+
+```yaml
+BASIC_MODEL:
+  base_url: https://ark.cn-beijing.volces.com/api/v3
+  model: "doubao-1-5-pro-32k-250115"
+  api_key: xxxx
+```
+
+#### Switching Models
+
+- **Via Web Interface**: Use the Model Selection section in Settings to choose different models for each task type
+- **Via Configuration**: The first model in each list serves as the default
+- **Runtime Selection**: Models can be selected per conversation without server restart
 
 ---
 

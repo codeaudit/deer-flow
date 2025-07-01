@@ -30,6 +30,7 @@ export type Flow = {
     maxSearchResults: number;
     reportStyle: "academic" | "popular_science" | "news" | "social_media";
   };
+  selectedModels: Record<string, string>; // Per-flow model selection
   createdAt: string;
   updatedAt: string;
 };
@@ -682,14 +683,26 @@ const createDefaultFlow = (): Flow => ({
   description: "The original DeerFlow research workflow with standard settings and prompts.",
   prompts: DEFAULT_PROMPTS,
   generalSettings: DEFAULT_GENERAL_SETTINGS,
+  selectedModels: {},
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 });
+
+// LLM Configuration Parameters
+export type LLMParameters = {
+  temperature: number;        // 0.0-2.0, default 0.7
+  max_tokens: number;         // 1-context_window, default 2048
+  top_p: number;             // 0.0-1.0, default 0.9
+  frequency_penalty: number; // -2.0 to 2.0, default 0.0
+};
+
+export type ModelParameters = Record<string, LLMParameters>; // {"model_id": LLMParameters}
 
 // Updated SettingsState type
 export type SettingsState = {
   flows: Flow[];
   activeFlowId: string;
+  modelParameters: ModelParameters; // Per-model parameter overrides
   mcp: {
     servers: MCPServerMetadata[];
   };
@@ -699,6 +712,7 @@ export type SettingsState = {
 const DEFAULT_SETTINGS: SettingsState = {
   flows: [createDefaultFlow()],
   activeFlowId: "default",
+  modelParameters: {},
   mcp: {
     servers: [],
   },
@@ -736,10 +750,12 @@ export const loadSettings = () => {
             description: "Migrated from your previous settings",
             prompts: settings.prompts,
             generalSettings: settings.general,
+            selectedModels: settings.selectedModels ?? {},
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           }],
           activeFlowId: "default",
+          modelParameters: {},
           mcp: settings.mcp ?? { servers: [] },
         };
         useSettingsStore.setState(migratedSettings);
@@ -763,6 +779,15 @@ export const loadSettings = () => {
 
         // Ensure MCP settings exist
         settings.mcp ??= { servers: [] };
+        
+        // Ensure modelParameters exists
+        settings.modelParameters ??= {};
+        
+        // Ensure all flows have selectedModels
+        settings.flows = settings.flows.map((flow: Flow) => ({
+          ...flow,
+          selectedModels: flow.selectedModels ?? {}
+        }));
 
         useSettingsStore.setState(settings);
       } else {
@@ -832,10 +857,14 @@ export const getChatStreamSettings = () => {
     };
   }
   
+  const { modelParameters } = useSettingsStore.getState();
+  
   return {
     ...activeFlow.generalSettings,
     mcpSettings,
     customPrompts: activeFlow.prompts,
+    selectedModels: activeFlow.selectedModels,
+    modelParameters,
   };
 };
 
@@ -850,6 +879,7 @@ export function createFlow(name: string, basedOn?: Flow): Flow {
     description: `Custom flow based on ${baseFlow.name}`,
     prompts: { ...baseFlow.prompts },
     generalSettings: { ...baseFlow.generalSettings },
+    selectedModels: { ...baseFlow.selectedModels },
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -1135,6 +1165,118 @@ export function fixPlannerJsonFormat(flowId?: string): void {
   }));
   saveSettings();
   console.log(`Fixed planner JSON format for flow: ${targetFlowId}`);
+}
+
+// Model Selection Functions
+export function setSelectedModel(llmType: string, modelId: string, flowId?: string): void {
+  const targetFlowId = flowId ?? getActiveFlow().id;
+  useSettingsStore.setState((state) => ({
+    ...state,
+    flows: state.flows.map(flow => 
+      flow.id === targetFlowId 
+        ? { 
+            ...flow, 
+            selectedModels: { ...flow.selectedModels, [llmType]: modelId },
+            updatedAt: new Date().toISOString()
+          }
+        : flow
+    ),
+  }));
+  saveSettings();
+}
+
+export function getSelectedModel(llmType: string, flowId?: string): string | undefined {
+  const targetFlowId = flowId ?? getActiveFlow().id;
+  const flow = getFlowById(targetFlowId);
+  return flow?.selectedModels[llmType];
+}
+
+export function getSelectedModels(flowId?: string): Record<string, string> {
+  const targetFlowId = flowId ?? getActiveFlow().id;
+  const flow = getFlowById(targetFlowId);
+  return flow?.selectedModels ?? {};
+}
+
+export function clearSelectedModel(llmType: string, flowId?: string): void {
+  const targetFlowId = flowId ?? getActiveFlow().id;
+  useSettingsStore.setState((state) => ({
+    ...state,
+    flows: state.flows.map(flow => 
+      flow.id === targetFlowId 
+        ? { 
+            ...flow, 
+            selectedModels: Object.fromEntries(
+              Object.entries(flow.selectedModels).filter(([key]) => key !== llmType)
+            ),
+            updatedAt: new Date().toISOString()
+          }
+        : flow
+    ),
+  }));
+  saveSettings();
+}
+
+export function clearAllSelectedModels(flowId?: string): void {
+  const targetFlowId = flowId ?? getActiveFlow().id;
+  useSettingsStore.setState((state) => ({
+    ...state,
+    flows: state.flows.map(flow => 
+      flow.id === targetFlowId 
+        ? { 
+            ...flow, 
+            selectedModels: {},
+            updatedAt: new Date().toISOString()
+          }
+        : flow
+    ),
+  }));
+  saveSettings();
+}
+
+// Model Parameters Management Functions
+
+export function getDefaultParameters(): LLMParameters {
+  return {
+    temperature: 0.7,
+    max_tokens: 2048,
+    top_p: 0.9,
+    frequency_penalty: 0.0,
+  };
+}
+
+export function setModelParameters(modelId: string, parameters: Partial<LLMParameters>): void {
+  useSettingsStore.setState((state) => {
+    const currentParams = state.modelParameters[modelId] || getDefaultParameters();
+    return {
+      ...state,
+      modelParameters: {
+        ...state.modelParameters,
+        [modelId]: { ...currentParams, ...parameters },
+      },
+    };
+  });
+  saveSettings();
+}
+
+export function getModelParameters(modelId: string): LLMParameters {
+  const { modelParameters } = useSettingsStore.getState();
+  return modelParameters[modelId] || getDefaultParameters();
+}
+
+export function resetModelParameters(modelId: string): void {
+  useSettingsStore.setState((state) => {
+    const newParams = { ...state.modelParameters };
+    delete newParams[modelId];
+    return {
+      ...state,
+      modelParameters: newParams,
+    };
+  });
+  saveSettings();
+}
+
+export function getAllModelParameters(): ModelParameters {
+  return useSettingsStore.getState().modelParameters;
 }
 
 loadSettings();

@@ -101,15 +101,45 @@ def planner_node(
             }
         ]
 
+    # Get selected model for planner type
+    selected_model_id = None
+    if (
+        configurable.selected_models
+        and AGENT_LLM_MAP["planner"] in configurable.selected_models
+    ):
+        selected_model_id = configurable.selected_models[AGENT_LLM_MAP["planner"]]
+
+    # Get model parameters for the selected model
+    model_params = None
+    if (
+        configurable.model_parameters
+        and selected_model_id
+        and selected_model_id in configurable.model_parameters
+    ):
+        model_params = configurable.model_parameters[selected_model_id]
+
     if configurable.enable_deep_thinking:
-        llm = get_llm_by_type("reasoning")
+        reasoning_model_id = None
+        if configurable.selected_models and "reasoning" in configurable.selected_models:
+            reasoning_model_id = configurable.selected_models["reasoning"]
+        # Get parameters for reasoning model
+        reasoning_params = None
+        if (
+            configurable.model_parameters
+            and reasoning_model_id
+            and reasoning_model_id in configurable.model_parameters
+        ):
+            reasoning_params = configurable.model_parameters[reasoning_model_id]
+        llm = get_llm_by_type("reasoning", reasoning_model_id, reasoning_params)
     elif AGENT_LLM_MAP["planner"] == "basic":
-        llm = get_llm_by_type("basic").with_structured_output(
+        llm = get_llm_by_type(
+            "basic", selected_model_id, model_params
+        ).with_structured_output(
             Plan,
             method="json_mode",
         )
     else:
-        llm = get_llm_by_type(AGENT_LLM_MAP["planner"])
+        llm = get_llm_by_type(AGENT_LLM_MAP["planner"], selected_model_id, model_params)
 
     # if the plan iterations is greater than the max plan iterations, return the reporter node
     if plan_iterations >= configurable.max_plan_iterations:
@@ -212,8 +242,16 @@ def coordinator_node(
     logger.info("Coordinator talking.")
     configurable = Configuration.from_runnable_config(config)
     messages = apply_prompt_template("coordinator", state, configurable)
+    # Get selected model for coordinator
+    selected_model_id = None
+    if (
+        configurable.selected_models
+        and AGENT_LLM_MAP["coordinator"] in configurable.selected_models
+    ):
+        selected_model_id = configurable.selected_models[AGENT_LLM_MAP["coordinator"]]
+
     response = (
-        get_llm_by_type(AGENT_LLM_MAP["coordinator"])
+        get_llm_by_type(AGENT_LLM_MAP["coordinator"], selected_model_id)
         .bind_tools([handoff_to_planner])
         .invoke(messages)
     )
@@ -288,7 +326,17 @@ def reporter_node(state: State, config: RunnableConfig):
             )
         )
     logger.debug(f"Current invoke messages: {invoke_messages}")
-    response = get_llm_by_type(AGENT_LLM_MAP["reporter"]).invoke(invoke_messages)
+    # Get selected model for reporter
+    selected_model_id = None
+    if (
+        configurable.selected_models
+        and AGENT_LLM_MAP["reporter"] in configurable.selected_models
+    ):
+        selected_model_id = configurable.selected_models[AGENT_LLM_MAP["reporter"]]
+
+    response = get_llm_by_type(AGENT_LLM_MAP["reporter"], selected_model_id).invoke(
+        invoke_messages
+    )
     response_content = response.content
     logger.info(f"reporter response: {response_content}")
 
@@ -328,23 +376,30 @@ async def _execute_agent_step(
     completed_steps_info = ""
     if completed_steps:
         completed_steps_info = "# Existing Research Findings\n\n"
-        
+
         # Context window management: limit to last 2 steps and truncate content
         max_steps_to_include = 2
         max_chars_per_finding = 1500  # Limit each finding to reasonable size
-        
+
         # Get the most recent completed steps
-        recent_steps = completed_steps[-max_steps_to_include:] if len(completed_steps) > max_steps_to_include else completed_steps
-        
+        recent_steps = (
+            completed_steps[-max_steps_to_include:]
+            if len(completed_steps) > max_steps_to_include
+            else completed_steps
+        )
+
         for i, step in enumerate(recent_steps):
             # Truncate execution result if too long
             execution_content = step.execution_res or ""
             if len(execution_content) > max_chars_per_finding:
-                execution_content = execution_content[:max_chars_per_finding] + "\n\n[Content truncated for context management...]"
-            
+                execution_content = (
+                    execution_content[:max_chars_per_finding]
+                    + "\n\n[Content truncated for context management...]"
+                )
+
             completed_steps_info += f"## Recent Finding {i + 1}: {step.title}\n\n"
             completed_steps_info += f"<finding>\n{execution_content}\n</finding>\n\n"
-        
+
         # Add summary if we truncated steps
         if len(completed_steps) > max_steps_to_include:
             completed_steps_info += f"*Note: Showing {max_steps_to_include} most recent findings. {len(completed_steps) - max_steps_to_include} earlier findings completed.*\n\n"
@@ -481,11 +536,25 @@ async def _setup_and_execute_agent_step(
                         f"Powered by '{enabled_tools[tool.name]}'.\n{tool.description}"
                     )
                     loaded_tools.append(tool)
-            agent = create_agent(agent_type, agent_type, loaded_tools, agent_type, configurable)
+            agent = create_agent(
+                agent_type,
+                agent_type,
+                loaded_tools,
+                agent_type,
+                configurable,
+                configurable.selected_models,
+            )
             return await _execute_agent_step(state, agent, agent_type)
     else:
         # Use default tools if no MCP servers are configured
-        agent = create_agent(agent_type, agent_type, default_tools, agent_type, configurable)
+        agent = create_agent(
+            agent_type,
+            agent_type,
+            default_tools,
+            agent_type,
+            configurable,
+            configurable.selected_models,
+        )
         return await _execute_agent_step(state, agent, agent_type)
 
 

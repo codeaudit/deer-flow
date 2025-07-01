@@ -219,7 +219,7 @@ export function InputBox({
                   </h3>
                   <p>
                     When enabled, DeerFlow will use reasoning model (
-                    {config.models.reasoning?.[0]}) to generate more thoughtful
+                    {config.models.reasoning?.[0]?.name}) to generate more thoughtful
                     plans.
                   </p>
                 </div>

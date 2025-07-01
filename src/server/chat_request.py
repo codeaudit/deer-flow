@@ -68,6 +68,14 @@ class ChatRequest(BaseModel):
     custom_prompts: Optional[Dict[str, str]] = Field(
         None, description="Custom prompts for agents"
     )
+    selected_models: Optional[Dict[str, str]] = Field(
+        None,
+        description="Selected model IDs for each LLM type (e.g., {'basic': 'gpt-4o', 'reasoning': 'model_id'})",
+    )
+    model_parameters: Optional[Dict[str, Dict[str, float]]] = Field(
+        None,
+        description="Per-model parameters (e.g., {'model_id': {'temperature': 0.7, 'max_tokens': 2048}})",
+    )
 
 
 class TTSRequest(BaseModel):

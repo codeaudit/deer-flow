@@ -64,15 +64,19 @@ def apply_prompt_template(
     if len(messages) > max_messages:
         # Keep first few messages (important context) and recent messages
         important_messages = messages[:3]  # Keep initial context
-        recent_messages = messages[-(max_messages-3):]  # Keep recent conversation
+        recent_messages = messages[-(max_messages - 3) :]  # Keep recent conversation
         truncated_messages = important_messages + recent_messages
-        print(f"Context management: Truncated messages from {len(messages)} to {len(truncated_messages)}")
+        print(
+            f"Context management: Truncated messages from {len(messages)} to {len(truncated_messages)}"
+        )
         messages = truncated_messages
 
     try:
         # Check if we have custom prompts from configuration
-        custom_prompts = getattr(configurable, 'custom_prompts', None) if configurable else None
-        
+        custom_prompts = (
+            getattr(configurable, "custom_prompts", None) if configurable else None
+        )
+
         if custom_prompts and prompt_name in custom_prompts:
             # Use custom prompt from settings
             custom_prompt_content = custom_prompts[prompt_name]
@@ -80,7 +84,7 @@ def apply_prompt_template(
                 template = Template(custom_prompt_content)
                 system_prompt = template.render(**state_vars)
                 return [{"role": "system", "content": system_prompt}] + messages
-        
+
         # Fall back to default template file
         template = env.get_template(f"{prompt_name}.md")
         system_prompt = template.render(**state_vars)

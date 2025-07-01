@@ -14,6 +14,7 @@ import { Separator } from "~/components/ui/separator";
 import { Slider } from "~/components/ui/slider";
 import { Switch } from "~/components/ui/switch";
 import { Textarea } from "~/components/ui/textarea";
+import { ModelSelectorGroup } from "~/components/deer-flow/model-selector";
 import type { SettingsState, Flow } from "~/core/store";
 import { 
   createFlow, 
@@ -390,6 +391,23 @@ export const FlowLibraryTab: Tab = ({
               <Label htmlFor="enable-background-investigation">Enable Background Investigation</Label>
             </div>
           </div>
+        </div>
+
+        <Separator />
+
+        {/* Model Selection Section */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold">Model Selection</h3>
+          <p className="text-sm text-muted-foreground">
+            Choose specific models for different types of tasks. Leave unselected to use the first configured model.
+          </p>
+          <ModelSelectorGroup 
+            flowId={selectedFlow.id} 
+            onChange={() => {
+              const updatedSettings = useSettingsStore.getState();
+              onChange(updatedSettings);
+            }}
+          />
         </div>
 
         <Separator />

@@ -1,6 +1,15 @@
+export interface ModelInfo {
+  id: string;
+  name: string;
+  model: string;
+  provider: string;
+  context_window: number;
+}
+
 export interface ModelConfig {
-  basic: string[];
-  reasoning: string[];
+  basic: ModelInfo[];
+  reasoning: ModelInfo[];
+  vision: ModelInfo[];
 }
 
 export interface RagConfig {
