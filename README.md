@@ -89,7 +89,7 @@ uv sync
 # Tavily: https://app.tavily.com/home
 # Brave_SEARCH: https://brave.com/search/api/
 # volcengine TTS: Add your TTS credentials if you have them
-cp .env.example .env
+cp env.example.txt .env
 
 # See the 'Supported Search Engines' and 'Text-to-Speech Integration' sections below for all available options
 

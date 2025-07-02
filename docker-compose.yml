@@ -19,10 +19,15 @@ services:
       context: ./web
       dockerfile: Dockerfile
       args:
-        - NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        - SKIP_ENV_VALIDATION=1
     container_name: deer-flow-frontend
     ports:
       - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      - SKIP_ENV_VALIDATION=1
+      - NODE_ENV=production
     env_file:
       - .env
     depends_on:

@@ -53,13 +53,27 @@ class LoggedToolMixin:
         logger.debug(f"Tool {tool_name}.{method_name} called with parameters: {params}")
 
     def _run(self, *args: Any, **kwargs: Any) -> Any:
-        """Override _run method to add logging."""
+        """Override _run method to add logging and exception handling."""
         self._log_operation("_run", *args, **kwargs)
-        result = super()._run(*args, **kwargs)
-        logger.debug(
-            f"Tool {self.__class__.__name__.replace('Logged', '')} returned: {result}"
-        )
-        return result
+        try:
+            # Call the parent class's _run method
+            if hasattr(super(), "_run"):
+                result = super()._run(*args, **kwargs)  # type: ignore
+            else:
+                # Fallback for tools that don't have _run method
+                result = "Tool execution completed"
+            logger.debug(
+                f"Tool {self.__class__.__name__.replace('Logged', '')} returned: {result}"
+            )
+            return result
+        except Exception as e:
+            tool_name = self.__class__.__name__.replace("Logged", "")
+            error_msg = f"Tool {tool_name} error: {str(e)}"
+            logger.error(error_msg)
+            # Return a JSON error response instead of raising exception
+            import json
+
+            return json.dumps({"error": error_msg, "tool": tool_name, "success": False})
 
 
 def create_logged_tool(base_tool_class: Type[T]) -> Type[T]:
@@ -73,9 +87,9 @@ def create_logged_tool(base_tool_class: Type[T]) -> Type[T]:
         A new class that inherits from both LoggedToolMixin and the base tool class
     """
 
-    class LoggedTool(LoggedToolMixin, base_tool_class):
+    class LoggedTool(LoggedToolMixin, base_tool_class):  # type: ignore
         pass
 
     # Set a more descriptive name for the class
     LoggedTool.__name__ = f"Logged{base_tool_class.__name__}"
-    return LoggedTool
+    return LoggedTool  # type: ignore

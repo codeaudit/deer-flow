@@ -5,6 +5,7 @@
 // Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
 // SPDX-License-Identifier: MIT
 
+// Import env validation - can be skipped with SKIP_ENV_VALIDATION=1
 import "./src/env.js";
 
 /** @type {import("next").NextConfig} */

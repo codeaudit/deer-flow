@@ -1,18 +1,19 @@
 // Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
 // SPDX-License-Identifier: MIT
 
-import { useState, useCallback } from "react";
 import { Settings, RotateCcw, Sliders } from "lucide-react";
+import { useState, useCallback } from "react";
 
-import { Button } from "~/components/ui/button";
-import { Label } from "~/components/ui/label";
-import { Slider } from "~/components/ui/slider";
-import { Input } from "~/components/ui/input";
-import { Separator } from "~/components/ui/separator";
-import { Badge } from "~/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Tooltip } from "~/components/deer-flow/tooltip";
+import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
+import { Separator } from "~/components/ui/separator";
+import { Slider } from "~/components/ui/slider";
 import { useConfig } from "~/core/api/hooks";
+import type { ModelInfo } from "~/core/config/types";
 import { 
   getModelParameters, 
   setModelParameters, 
@@ -20,16 +21,14 @@ import {
   getDefaultParameters,
   type LLMParameters 
 } from "~/core/store/settings-store";
-import type { ModelInfo } from "~/core/config/types";
 
 import type { Tab } from "./types";
 
 interface ModelConfigCardProps {
   model: ModelInfo;
-  llmType: string;
 }
 
-function ModelConfigCard({ model, llmType }: ModelConfigCardProps) {
+function ModelConfigCard({ model }: ModelConfigCardProps) {
   const [parameters, setParameters] = useState<LLMParameters>(() => 
     getModelParameters(model.id)
   );
@@ -185,7 +184,7 @@ function ModelConfigCard({ model, llmType }: ModelConfigCardProps) {
   );
 }
 
-export const ModelsTab: Tab = ({ settings, onChange }) => {
+export const ModelsTab: Tab = () => {
   const { config, loading } = useConfig();
 
   if (loading) {
@@ -265,7 +264,6 @@ export const ModelsTab: Tab = ({ settings, onChange }) => {
                 <ModelConfigCard
                   key={model.id}
                   model={model}
-                  llmType="basic"
                 />
               ))}
             </div>
@@ -288,7 +286,6 @@ export const ModelsTab: Tab = ({ settings, onChange }) => {
                   <ModelConfigCard
                     key={model.id}
                     model={model}
-                    llmType="reasoning"
                   />
                 ))}
               </div>
@@ -312,7 +309,6 @@ export const ModelsTab: Tab = ({ settings, onChange }) => {
                   <ModelConfigCard
                     key={model.id}
                     model={model}
-                    llmType="vision"
                   />
                 ))}
               </div>

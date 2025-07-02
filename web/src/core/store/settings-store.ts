@@ -31,6 +31,7 @@ export type Flow = {
     reportStyle: "academic" | "popular_science" | "news" | "social_media";
   };
   selectedModels: Record<string, string>; // Per-flow model selection
+  enabledMcps: string[]; // Array of MCP server names enabled for this flow
   createdAt: string;
   updatedAt: string;
 };
@@ -684,6 +685,7 @@ const createDefaultFlow = (): Flow => ({
   prompts: DEFAULT_PROMPTS,
   generalSettings: DEFAULT_GENERAL_SETTINGS,
   selectedModels: {},
+  enabledMcps: ["weather-forecast", "time"], // Default pre-registered MCPs enabled
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 });
@@ -698,6 +700,60 @@ export type LLMParameters = {
 
 export type ModelParameters = Record<string, LLMParameters>; // {"model_id": LLMParameters}
 
+// Pre-registered MCP server configuration
+export type PreRegisteredMCPServer = {
+  name: string;
+  displayName: string;
+  description: string;
+  command: string;
+  args?: string[];
+  enabled: boolean; // Global enable/disable toggle
+  tools: {
+    name: string;
+    description: string;
+  }[];
+};
+
+// Default pre-registered MCP servers
+const DEFAULT_PRE_REGISTERED_MCPS: PreRegisteredMCPServer[] = [
+  {
+    name: "weather-forecast",
+    displayName: "Weather Forecast",
+    description: "Get weather forecasts and current conditions globally using wttr.in service",
+    command: "uvx",
+    args: ["weather-forecast-server"],
+    enabled: true,
+    tools: [
+      {
+        name: "get_forecast",
+        description: "Get weather forecast for a location"
+      },
+      {
+        name: "get_current_weather", 
+        description: "Get current weather conditions for a location"
+      }
+    ]
+  },
+  {
+    name: "time",
+    displayName: "Time & Timezone",
+    description: "Get current time in any timezone and perform timezone conversions",
+    command: "uvx",
+    args: ["time-mcp-local"],
+    enabled: true,
+    tools: [
+      {
+        name: "get_current_time",
+        description: "Get current time in a specific timezone"
+      },
+      {
+        name: "convert_timezone",
+        description: "Convert time between timezones"
+      }
+    ]
+  }
+];
+
 // Updated SettingsState type
 export type SettingsState = {
   flows: Flow[];
@@ -705,6 +761,7 @@ export type SettingsState = {
   modelParameters: ModelParameters; // Per-model parameter overrides
   mcp: {
     servers: MCPServerMetadata[];
+    preRegistered: PreRegisteredMCPServer[];
   };
 };
 
@@ -715,6 +772,7 @@ const DEFAULT_SETTINGS: SettingsState = {
   modelParameters: {},
   mcp: {
     servers: [],
+    preRegistered: DEFAULT_PRE_REGISTERED_MCPS,
   },
 };
 
@@ -751,12 +809,19 @@ export const loadSettings = () => {
             prompts: settings.prompts,
             generalSettings: settings.general,
             selectedModels: settings.selectedModels ?? {},
+            enabledMcps: ["weather-forecast", "time"], // Default pre-registered MCPs enabled
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           }],
           activeFlowId: "default",
           modelParameters: {},
-          mcp: settings.mcp ?? { servers: [] },
+          mcp: settings.mcp ? { 
+            servers: settings.mcp.servers ?? [], 
+            preRegistered: settings.mcp.preRegistered ?? DEFAULT_PRE_REGISTERED_MCPS 
+          } : { 
+            servers: [], 
+            preRegistered: DEFAULT_PRE_REGISTERED_MCPS 
+          },
         };
         useSettingsStore.setState(migratedSettings);
         saveSettings(); // Save the migrated structure
@@ -778,15 +843,17 @@ export const loadSettings = () => {
         }
 
         // Ensure MCP settings exist
-        settings.mcp ??= { servers: [] };
+        settings.mcp ??= { servers: [], preRegistered: DEFAULT_PRE_REGISTERED_MCPS };
+        settings.mcp.preRegistered ??= DEFAULT_PRE_REGISTERED_MCPS;
         
         // Ensure modelParameters exists
         settings.modelParameters ??= {};
         
-        // Ensure all flows have selectedModels
+        // Ensure all flows have selectedModels and enabledMcps
         settings.flows = settings.flows.map((flow: Flow) => ({
           ...flow,
-          selectedModels: flow.selectedModels ?? {}
+          selectedModels: flow.selectedModels ?? {},
+          enabledMcps: flow.enabledMcps ?? ["weather-forecast", "time"] // Default MCPs for migrated flows
         }));
 
         useSettingsStore.setState(settings);
@@ -822,11 +889,34 @@ export const getChatStreamSettings = () => {
     | undefined = undefined;
   const { mcp } = useSettingsStore.getState();
   const activeFlow = getActiveFlow();
-  const mcpServers = mcp.servers.filter((server) => server.enabled);
   
-  if (mcpServers.length > 0) {
+  // Get custom MCP servers that are enabled
+  const enabledCustomServers = mcp.servers.filter((server) => server.enabled);
+  
+  // Get pre-registered MCPs that are globally enabled AND enabled for this flow
+  const enabledPreRegisteredServers = mcp.preRegistered
+    .filter((preServer) => preServer.enabled && activeFlow.enabledMcps.includes(preServer.name))
+    .map((preServer): MCPServerMetadata => ({
+      name: preServer.name,
+      transport: "stdio" as const,
+      command: preServer.command,
+      args: preServer.args,
+      enabled: true,
+      tools: preServer.tools.map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: {}
+      })),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }));
+  
+  // Combine both types of servers
+  const allEnabledServers = [...enabledCustomServers, ...enabledPreRegisteredServers];
+  
+  if (allEnabledServers.length > 0) {
     mcpSettings = {
-      servers: mcpServers.reduce((acc, cur) => {
+      servers: allEnabledServers.reduce((acc, cur) => {
         const { transport, env } = cur;
         let server: SimpleMCPServerMetadata;
         if (transport === "stdio") {
@@ -880,6 +970,7 @@ export function createFlow(name: string, basedOn?: Flow): Flow {
     prompts: { ...baseFlow.prompts },
     generalSettings: { ...baseFlow.generalSettings },
     selectedModels: { ...baseFlow.selectedModels },
+    enabledMcps: [...baseFlow.enabledMcps], // Copy enabled MCPs from base flow
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -1246,7 +1337,7 @@ export function getDefaultParameters(): LLMParameters {
 
 export function setModelParameters(modelId: string, parameters: Partial<LLMParameters>): void {
   useSettingsStore.setState((state) => {
-    const currentParams = state.modelParameters[modelId] || getDefaultParameters();
+    const currentParams = state.modelParameters[modelId] ?? getDefaultParameters();
     return {
       ...state,
       modelParameters: {
@@ -1260,7 +1351,7 @@ export function setModelParameters(modelId: string, parameters: Partial<LLMParam
 
 export function getModelParameters(modelId: string): LLMParameters {
   const { modelParameters } = useSettingsStore.getState();
-  return modelParameters[modelId] || getDefaultParameters();
+  return modelParameters[modelId] ?? getDefaultParameters();
 }
 
 export function resetModelParameters(modelId: string): void {
@@ -1277,6 +1368,72 @@ export function resetModelParameters(modelId: string): void {
 
 export function getAllModelParameters(): ModelParameters {
   return useSettingsStore.getState().modelParameters;
+}
+
+// MCP Management Functions
+
+export function togglePreRegisteredMCP(mcpName: string, enabled: boolean): void {
+  useSettingsStore.setState((state) => ({
+    ...state,
+    mcp: {
+      ...state.mcp,
+      preRegistered: state.mcp.preRegistered.map(mcp =>
+        mcp.name === mcpName ? { ...mcp, enabled } : mcp
+      ),
+    },
+  }));
+  saveSettings();
+}
+
+export function getPreRegisteredMCPs(): PreRegisteredMCPServer[] {
+  return useSettingsStore.getState().mcp.preRegistered;
+}
+
+export function toggleFlowMCP(mcpName: string, enabled: boolean, flowId?: string): void {
+  const targetFlowId = flowId ?? getActiveFlow().id;
+  
+  useSettingsStore.setState((state) => ({
+    ...state,
+    flows: state.flows.map(flow => 
+      flow.id === targetFlowId 
+        ? { 
+            ...flow, 
+            enabledMcps: enabled 
+              ? [...flow.enabledMcps.filter(name => name !== mcpName), mcpName]
+              : flow.enabledMcps.filter(name => name !== mcpName),
+            updatedAt: new Date().toISOString()
+          }
+        : flow
+    ),
+  }));
+  saveSettings();
+}
+
+export function getFlowEnabledMCPs(flowId?: string): string[] {
+  const targetFlowId = flowId ?? getActiveFlow().id;
+  const flow = getFlowById(targetFlowId);
+  return flow?.enabledMcps ?? [];
+}
+
+export function isFlowMCPEnabled(mcpName: string, flowId?: string): boolean {
+  const enabledMcps = getFlowEnabledMCPs(flowId);
+  return enabledMcps.includes(mcpName);
+}
+
+export function getAvailableMCPsForFlow(flowId?: string): {
+  preRegistered: (PreRegisteredMCPServer & { flowEnabled: boolean })[];
+  custom: MCPServerMetadata[];
+} {
+  const { mcp } = useSettingsStore.getState();
+  const flowEnabledMcps = getFlowEnabledMCPs(flowId);
+  
+  return {
+    preRegistered: mcp.preRegistered.map(preServer => ({
+      ...preServer,
+      flowEnabled: flowEnabledMcps.includes(preServer.name)
+    })),
+    custom: mcp.servers
+  };
 }
 
 loadSettings();

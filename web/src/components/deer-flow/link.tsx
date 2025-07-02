@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useStore, useToolCalls } from "~/core/store";
+import { parseJSON } from "~/core/utils";
 import { Tooltip } from "./tooltip";
 import { WarningFilled } from "@ant-design/icons";
 
@@ -21,12 +22,16 @@ export const Link = ({
 
     (toolCalls || []).forEach((call) => {
       if (call && call.name === "web_search" && call.result) {
-        const result = JSON.parse(call.result) as Array<{ url: string }>;
-        result.forEach((r) => {
-          // encodeURI is used to handle the case where the link contains chinese or other special characters
-          links.add(encodeURI(r.url));
-          links.add(r.url);
-        });
+        const result = parseJSON(call.result, []) as Array<{ url: string }>;
+        if (Array.isArray(result)) {
+          result.forEach((r) => {
+            if (r && r.url) {
+              // encodeURI is used to handle the case where the link contains chinese or other special characters
+              links.add(encodeURI(r.url));
+              links.add(r.url);
+            }
+          });
+        }
       }
     });
     return links;

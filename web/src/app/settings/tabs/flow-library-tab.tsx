@@ -4,6 +4,7 @@
 import { FileText, Plus, Settings, Trash2, Copy, RotateCcw } from "lucide-react";
 import { useState, useCallback } from "react";
 
+import { ModelSelectorGroup } from "~/components/deer-flow/model-selector";
 import { Tooltip } from "~/components/deer-flow/tooltip";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -14,7 +15,6 @@ import { Separator } from "~/components/ui/separator";
 import { Slider } from "~/components/ui/slider";
 import { Switch } from "~/components/ui/switch";
 import { Textarea } from "~/components/ui/textarea";
-import { ModelSelectorGroup } from "~/components/deer-flow/model-selector";
 import type { SettingsState, Flow } from "~/core/store";
 import { 
   createFlow, 
@@ -27,7 +27,10 @@ import {
   resetAllPrompts,
   fixBrokenTemplates,
   fixPlannerJsonFormat,
-  useSettingsStore
+  useSettingsStore,
+  getPreRegisteredMCPs,
+  toggleFlowMCP,
+  isFlowMCPEnabled,
 } from "~/core/store";
 
 import type { Tab } from "./types";
@@ -412,6 +415,23 @@ export const FlowLibraryTab: Tab = ({
 
         <Separator />
 
+        {/* MCP Selection Section */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold">MCP Servers</h3>
+          <p className="text-sm text-muted-foreground">
+            Enable specific MCP tools for this flow. Only globally enabled MCPs can be selected.
+          </p>
+          <FlowMCPSelector 
+            flowId={selectedFlow.id} 
+            onChange={() => {
+              const updatedSettings = useSettingsStore.getState();
+              onChange(updatedSettings);
+            }}
+          />
+        </div>
+
+        <Separator />
+
         {/* Prompts Section */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -561,6 +581,68 @@ export const FlowLibraryTab: Tab = ({
     </div>
   );
 };
+
+// Flow MCP Selector Component
+function FlowMCPSelector({ flowId, onChange }: { flowId: string; onChange?: () => void }) {
+  const preRegisteredMCPs = getPreRegisteredMCPs();
+  
+  const handleToggleMCP = useCallback((mcpName: string, enabled: boolean) => {
+    toggleFlowMCP(mcpName, enabled, flowId);
+    onChange?.();
+  }, [flowId, onChange]);
+
+  const enabledMCPs = preRegisteredMCPs.filter(mcp => mcp.enabled);
+  
+  if (enabledMCPs.length === 0) {
+    return (
+      <div className="text-center py-6 text-muted-foreground">
+        <Settings className="mx-auto mb-2 h-8 w-8 opacity-50" />
+        <p className="text-sm">No globally enabled MCPs available</p>
+        <p className="text-xs">Enable MCPs in the MCP settings tab first</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {enabledMCPs.map((mcp) => {
+        const isFlowEnabled = isFlowMCPEnabled(mcp.name, flowId);
+        
+        return (
+          <div
+            key={mcp.name}
+            className="flex items-center justify-between p-3 rounded-lg border bg-card"
+          >
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <h4 className="font-medium text-sm">{mcp.displayName}</h4>
+                <Badge variant="outline" className="text-xs">Built-in</Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mb-2">
+                {mcp.description}
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {mcp.tools.map((tool) => (
+                  <Tooltip key={tool.name} title={tool.description}>
+                    <Badge variant="secondary" className="text-xs">
+                      {tool.name}
+                    </Badge>
+                  </Tooltip>
+                ))}
+              </div>
+            </div>
+            <div className="ml-4">
+              <Switch
+                checked={isFlowEnabled}
+                onCheckedChange={(enabled) => handleToggleMCP(mcp.name, enabled)}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 FlowLibraryTab.displayName = "Flow Library";
 FlowLibraryTab.icon = FileText; 

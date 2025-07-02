@@ -38,13 +38,17 @@ class EnhancedTavilySearchAPIWrapper(OriginalTavilySearchAPIWrapper):
             "include_images": include_images,
             "include_image_descriptions": include_image_descriptions,
         }
-        response = requests.post(
-            # type: ignore
-            f"{TAVILY_API_URL}/search",
-            json=params,
-        )
-        response.raise_for_status()
-        return response.json()
+        try:
+            response = requests.post(
+                # type: ignore
+                f"{TAVILY_API_URL}/search",
+                json=params,
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            # Return a proper error response instead of raising exception
+            return {"error": f"Search API error: {str(e)}", "results": [], "images": []}
 
     async def raw_results_async(
         self,
@@ -80,7 +84,13 @@ class EnhancedTavilySearchAPIWrapper(OriginalTavilySearchAPIWrapper):
                         data = await res.text()
                         return data
                     else:
-                        raise Exception(f"Error {res.status}: {res.reason}")
+                        # Return a proper error JSON instead of raising exception
+                        error_response = {
+                            "error": f"Search API error {res.status}: {res.reason}",
+                            "results": [],
+                            "images": [],
+                        }
+                        return json.dumps(error_response)
 
         results_json_str = await fetch()
         return json.loads(results_json_str)

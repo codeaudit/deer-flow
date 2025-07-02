@@ -60,7 +60,12 @@ class RAGFlowProvider(Retriever):
         )
 
         if response.status_code != 200:
-            raise Exception(f"Failed to query documents: {response.text}")
+            # Return empty results instead of raising exception
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to query documents: {response.text}")
+            return []
 
         result = response.json()
         data = result.get("data", {})
@@ -101,7 +106,12 @@ class RAGFlowProvider(Retriever):
         )
 
         if response.status_code != 200:
-            raise Exception(f"Failed to list resources: {response.text}")
+            # Return empty list instead of raising exception
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to list resources: {response.text}")
+            return []
 
         result = response.json()
         resources = []
