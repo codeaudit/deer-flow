@@ -4,18 +4,18 @@
 import { FileText, Plus, Settings, Trash2, Copy, RotateCcw } from "lucide-react";
 import { useState, useCallback } from "react";
 
-import { ModelSelectorGroup } from "~/components/deer-flow/model-selector";
-import { Tooltip } from "~/components/deer-flow/tooltip";
-import { Badge } from "~/components/ui/badge";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
-import { Separator } from "~/components/ui/separator";
-import { Slider } from "~/components/ui/slider";
-import { Switch } from "~/components/ui/switch";
-import { Textarea } from "~/components/ui/textarea";
-import type { SettingsState, Flow } from "~/core/store";
+import { ModelSelectorGroup } from "@/components/deer-flow/model-selector";
+import { Tooltip } from "@/components/deer-flow/tooltip";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import type { SettingsState, Flow } from "@/core/store";
 import { 
   createFlow, 
   updateFlow, 
@@ -31,7 +31,7 @@ import {
   getPreRegisteredMCPs,
   toggleFlowMCP,
   isFlowMCPEnabled,
-} from "~/core/store";
+} from "@/core/store";
 
 import type { Tab } from "./types";
 

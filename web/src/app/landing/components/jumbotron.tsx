@@ -1,35 +1,30 @@
+"use client";
+
 // Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
 // SPDX-License-Identifier: MIT
 
 import { GithubFilled } from "@ant-design/icons";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
+import { memo } from "react";
 
-import { AuroraText } from "~/components/magicui/aurora-text";
-import { FlickeringGrid } from "~/components/magicui/flickering-grid";
-import { Button } from "~/components/ui/button";
-import { env } from "~/env";
+import { AuroraText } from "@/components/magicui/aurora-text";
+import { FlickeringGrid } from "@/components/magicui/flickering-grid";
+import { Button } from "@/components/ui/button";
+import { env } from "@/env";
 
-export function Jumbotron() {
+export const Jumbotron = memo(() => {
   return (
     <section className="flex h-[95vh] w-full flex-col items-center justify-center pb-15">
-      <FlickeringGrid
-        id="deer-hero-bg"
-        className={`absolute inset-0 z-0 [mask-image:radial-gradient(800px_circle_at_center,white,transparent)]`}
-        squareSize={4}
-        gridGap={4}
-        color="#60A5FA"
-        maxOpacity={0.133}
-        flickerChance={0.1}
-      />
+      {/* Use a single FlickeringGrid with optimized settings */}
       <FlickeringGrid
         id="deer-hero"
         className="absolute inset-0 z-0 translate-y-[2vh] mask-[url(/images/deer-hero.svg)] mask-size-[100vw] mask-center mask-no-repeat md:mask-size-[72vh]"
-        squareSize={3}
+        squareSize={4}
         gridGap={6}
         color="#60A5FA"
-        maxOpacity={0.64}
-        flickerChance={0.12}
+        maxOpacity={0.4}
+        flickerChance={0.08}
       />
       <div className="relative z-10 flex flex-col items-center justify-center gap-12">
         <h1 className="text-center text-4xl font-bold md:text-6xl">
@@ -82,4 +77,6 @@ export function Jumbotron() {
       </div>
     </section>
   );
-}
+})
+
+Jumbotron.displayName = "Jumbotron";

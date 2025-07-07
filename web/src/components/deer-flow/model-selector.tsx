@@ -4,19 +4,19 @@
 import { useState, useEffect } from "react";
 import { ChevronDown } from "lucide-react";
 
-import { Button } from "~/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover";
-import { Badge } from "~/components/ui/badge";
-import { Separator } from "~/components/ui/separator";
-import { useConfig } from "~/core/api/hooks";
-import type { ModelInfo } from "~/core/config/types";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { useConfig } from "@/core/api/hooks";
+import type { ModelInfo } from "@/core/config/types";
 import { 
   getSelectedModel, 
   setSelectedModel, 
   clearSelectedModel,
   getActiveFlow,
   useSettingsStore
-} from "~/core/store/settings-store";
+} from "@/core/store/settings-store";
 
 interface ModelSelectorProps {
   llmType: "basic" | "reasoning" | "vision";

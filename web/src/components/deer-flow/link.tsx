@@ -1,6 +1,6 @@
 import { useMemo } from "react";
-import { useStore, useToolCalls } from "~/core/store";
-import { parseJSON } from "~/core/utils";
+import { useStore, useToolCalls } from "@/core/store";
+import { parseJSON } from "@/core/utils";
 import { Tooltip } from "./tooltip";
 import { WarningFilled } from "@ant-design/icons";
 

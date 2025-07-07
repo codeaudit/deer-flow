@@ -4,23 +4,23 @@
 import { Settings, RotateCcw, Sliders } from "lucide-react";
 import { useState, useCallback } from "react";
 
-import { Tooltip } from "~/components/deer-flow/tooltip";
-import { Badge } from "~/components/ui/badge";
-import { Button } from "~/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
-import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
-import { Separator } from "~/components/ui/separator";
-import { Slider } from "~/components/ui/slider";
-import { useConfig } from "~/core/api/hooks";
-import type { ModelInfo } from "~/core/config/types";
+import { Tooltip } from "@/components/deer-flow/tooltip";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Slider } from "@/components/ui/slider";
+import { useConfig } from "@/core/api/hooks";
+import type { ModelInfo } from "@/core/config/types";
 import { 
   getModelParameters, 
   setModelParameters, 
   resetModelParameters,
   getDefaultParameters,
   type LLMParameters 
-} from "~/core/store/settings-store";
+} from "@/core/store/settings-store";
 
 import type { Tab } from "./types";
 

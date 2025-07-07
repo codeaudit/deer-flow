@@ -4,28 +4,28 @@
 import { Check, ChevronDown, FileText, Settings } from "lucide-react";
 import { useState } from "react";
 
-import { Button } from "~/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { 
   Command,
   CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
-} from "~/components/ui/command";
+} from "@/components/ui/command";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "~/components/ui/popover";
-import { Badge } from "~/components/ui/badge";
-import { Tooltip } from "~/components/deer-flow/tooltip";
+} from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip } from "@/components/deer-flow/tooltip";
 import { 
   getActiveFlow, 
   getAllFlows, 
   setActiveFlow,
   type Flow
-} from "~/core/store";
-import { cn } from "~/lib/utils";
+} from "@/core/store";
+import { cn } from "@/lib/utils";
 
 interface FlowSelectorProps {
   className?: string;

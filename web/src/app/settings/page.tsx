@@ -7,17 +7,17 @@ import { ArrowLeft, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
-import { Badge } from "~/components/ui/badge";
-import { Button } from "~/components/ui/button";
-import { Tabs, TabsContent } from "~/components/ui/tabs";
-import { useReplay } from "~/core/replay";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { useReplay } from "@/core/replay";
 import {
   type SettingsState,
   changeSettings,
   saveSettings,
   useSettingsStore,
-} from "~/core/store";
-import { cn } from "~/lib/utils";
+} from "@/core/store";
+import { cn } from "@/lib/utils";
 
 import { SETTINGS_TABS } from "./tabs";
 

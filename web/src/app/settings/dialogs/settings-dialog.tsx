@@ -4,9 +4,9 @@
 import { Settings } from "lucide-react";
 import Link from "next/link";
 
-import { Tooltip } from "~/components/deer-flow/tooltip";
-import { Button } from "~/components/ui/button";
-import { useReplay } from "~/core/replay";
+import { Tooltip } from "@/components/deer-flow/tooltip";
+import { Button } from "@/components/ui/button";
+import { useReplay } from "@/core/replay";
 
 export function SettingsDialog() {
   const { isReplay } = useReplay();

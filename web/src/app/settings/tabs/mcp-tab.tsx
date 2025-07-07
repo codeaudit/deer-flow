@@ -5,17 +5,17 @@ import { motion } from "framer-motion";
 import { Blocks, PencilRuler, Trash, Globe } from "lucide-react";
 import { useCallback, useState } from "react";
 
-import { Tooltip } from "~/components/deer-flow/tooltip";
-import { Button } from "~/components/ui/button";
-import { Separator } from "~/components/ui/separator";
-import { Switch } from "~/components/ui/switch";
-import type { MCPServerMetadata } from "~/core/mcp";
+import { Tooltip } from "@/components/deer-flow/tooltip";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import type { MCPServerMetadata } from "@/core/mcp";
 import { 
   getPreRegisteredMCPs, 
   togglePreRegisteredMCP, 
   useSettingsStore,
-} from "~/core/store/settings-store";
-import { cn } from "~/lib/utils";
+} from "@/core/store/settings-store";
+import { cn } from "@/lib/utils";
 
 import { AddMCPServerDialog } from "../dialogs/add-mcp-server-dialog";
 
