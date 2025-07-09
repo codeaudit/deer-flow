@@ -56,7 +56,7 @@ export function useConfig(): {
       setLoading(false);
       return;
     }
-    fetch(resolveServiceURL("./config"))
+    fetch(resolveServiceURL("config"))
       .then((res) => res.json())
       .then((config) => {
         setConfig(config);
@@ -64,7 +64,21 @@ export function useConfig(): {
       })
       .catch((err) => {
         console.error("Failed to fetch config", err);
-        setConfig(null);
+        console.warn("Using fallback configuration. Please ensure the backend API is running at:", resolveServiceURL("config"));
+        
+        // Provide fallback configuration to prevent crashes
+        const fallbackConfig: DeerFlowConfig = {
+          rag: {
+            provider: ""
+          },
+          models: {
+            basic: [],
+            reasoning: [],
+            vision: []
+          }
+        };
+        
+        setConfig(fallbackConfig);
         setLoading(false);
       });
   }, []);

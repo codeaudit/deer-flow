@@ -209,7 +209,7 @@ export function InputBox({
       </div>
       <div className="flex items-center px-4 py-2">
         <div className="flex grow gap-1.5 flex-wrap items-center">
-          {config?.models.reasoning?.[0] && (
+          {config?.models?.reasoning && config.models.reasoning[0] && (
             <Tooltip
               className="max-w-60"
               title={
@@ -219,7 +219,7 @@ export function InputBox({
                   </h3>
                   <p>
                     When enabled, DeerFlow will use reasoning model (
-                    {config.models.reasoning?.[0]?.name}) to generate more thoughtful
+                    {config.models.reasoning[0]?.name}) to generate more thoughtful
                     plans.
                   </p>
                 </div>

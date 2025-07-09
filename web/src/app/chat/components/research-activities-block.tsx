@@ -5,7 +5,8 @@ import { PythonOutlined } from "@ant-design/icons";
 import { motion } from "framer-motion";
 import { LRUCache } from "lru-cache";
 import { BookOpenText, FileText, PencilRuler, Search } from "lucide-react";
-import { useTheme } from "next-themes";
+// import { useTheme } from "next-themes";
+const useTheme = () => ({ theme: 'light', resolvedTheme: 'light' }); // Temporary fix
 import { useMemo } from "react";
 import SyntaxHighlighter from "react-syntax-highlighter";
 import { docco } from "react-syntax-highlighter/dist/esm/styles/hljs";

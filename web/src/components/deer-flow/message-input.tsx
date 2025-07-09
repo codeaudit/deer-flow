@@ -136,7 +136,7 @@ const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         }),
         Placeholder.configure({
           showOnlyCurrent: false,
-          placeholder: config?.rag.provider
+          placeholder: config?.rag?.provider && config.rag.provider.trim() !== ""
             ? "What can I do for you? \nYou may refer to RAG resources by using @."
             : "What can I do for you?",
           emptyEditorClass: "placeholder",
@@ -158,7 +158,7 @@ const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
           },
         }),
       ];
-      if (config?.rag.provider) {
+      if (config?.rag?.provider && config.rag.provider.trim() !== "") {
         extensions.push(
           Mention.configure({
             HTMLAttributes: {

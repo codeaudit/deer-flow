@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,14 +20,15 @@ export function LandingHeader() {
     const supabase = createClient();
     
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Using getSession() for UI state management (acceptable for client-side display logic)
+    supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
       if (session?.user) {
         setUserInfo(session.user.email || session.user.user_metadata?.full_name || "User");
       }
     });
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
       if (session?.user) {
         setUserInfo(session.user.email || session.user.user_metadata?.full_name || "User");
       } else {
@@ -68,12 +70,11 @@ export function LandingHeader() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Link 
-              href="/auth" 
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Sign in
-            </Link>
+            <Button asChild variant="outline">
+              <Link href="/auth">
+                Sign in
+              </Link>
+            </Button>
           )}
         </div>
       </div>

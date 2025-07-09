@@ -6,12 +6,11 @@ import "@/styles/globals.css";
 import { type Metadata } from "next";
 import { Geist } from "next/font/google";
 import Script from "next/script";
+import { cookies } from "next/headers";
 
-import { ThemeProviderWrapper } from "@/components/deer-flow/theme-provider-wrapper";
 import { env } from "@/env";
-import { Toaster } from "../components/deer-flow/toaster";
-import { createClient } from '@/lib/supabase/server';
-import { AuthProvider } from '@/components/auth/AuthProvider';
+import { Providers } from "@/providers/providers";
+import { debugEnv } from "@/lib/env-check";
 
 export const metadata: Metadata = {
   title: "🦌 DeerFlow",
@@ -30,10 +29,13 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  // Debug environment variables in development
+  if (process.env.NODE_ENV === 'development') {
+    debugEnv();
+  }
+  
+  const cookieStore = await cookies();
+  const initialCookies = cookieStore.getAll();
 
   return (
     <html lang="en" className={geist.variable} suppressHydrationWarning>
@@ -49,16 +51,20 @@ export default async function RootLayout({
             }
           `}
         </Script>
+        <Script id="hydration-fix" strategy="beforeInteractive">
+          {`
+            if (typeof window !== 'undefined') {
+              window.__INITIAL_COOKIES__ = ${JSON.stringify(initialCookies)};
+            }
+          `}
+        </Script>
       </head>
-      <body className="bg-app">
-        <ThemeProviderWrapper>
-          <AuthProvider>
-            <div className="relative flex min-h-screen flex-col">
-              <div className="flex-1">{children}</div>
-            </div>
-          </AuthProvider>
-        </ThemeProviderWrapper>
-        <Toaster />
+      <body className="bg-app" suppressHydrationWarning>
+        <Providers initialCookies={initialCookies}>
+          <div className="relative flex min-h-screen flex-col">
+            <div className="flex-1">{children}</div>
+          </div>
+        </Providers>
         {
           // NO USER BEHAVIOR TRACKING OR PRIVATE DATA COLLECTION BY DEFAULT
           //
