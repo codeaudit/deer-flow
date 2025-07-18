@@ -21,6 +21,7 @@ import {
   getDefaultParameters,
   type LLMParameters 
 } from "@/core/store/settings-store";
+import { useAuth } from "@/components/auth/AuthProvider";
 
 import type { Tab } from "./types";
 
@@ -186,6 +187,7 @@ function ModelConfigCard({ model }: ModelConfigCardProps) {
 
 export const ModelsTab: Tab = () => {
   const { config, loading } = useConfig();
+  const { account } = useAuth(); // Get current account
 
   if (loading) {
     return (
@@ -198,7 +200,8 @@ export const ModelsTab: Tab = () => {
     );
   }
 
-  if (!config?.models) {
+  // Defensive: If config or config.models is missing, show empty state
+  if (!config || !config.models || typeof config.models !== 'object') {
     return (
       <div className="flex flex-col gap-4">
         <header>
@@ -212,15 +215,13 @@ export const ModelsTab: Tab = () => {
   }
 
   const allModels: Array<{ model: ModelInfo; type: string }> = [];
-  
-  // Collect all configured models
-  if (config.models.basic) {
+  if (Array.isArray(config.models.basic)) {
     allModels.push(...config.models.basic.map(model => ({ model, type: "basic" })));
   }
-  if (config.models.reasoning) {
+  if (Array.isArray(config.models.reasoning)) {
     allModels.push(...config.models.reasoning.map(model => ({ model, type: "reasoning" })));
   }
-  if (config.models.vision) {
+  if (Array.isArray(config.models.vision)) {
     allModels.push(...config.models.vision.map(model => ({ model, type: "vision" })));
   }
 
@@ -250,71 +251,15 @@ export const ModelsTab: Tab = () => {
       </header>
 
       <main className="space-y-6">
+        {account && (
+          <div className="text-sm text-muted-foreground mb-4">
+            Managing models for account: {account.name}
+          </div>
+        )}
         {/* Basic Models */}
-        {config.models.basic && config.models.basic.length > 0 && (
-          <section>
-            <h2 className="text-md font-medium mb-3 flex items-center gap-2">
-              Chat Models
-              <Badge variant="secondary" className="text-xs">
-                {config.models.basic.length}
-              </Badge>
-            </h2>
-            <div className="grid gap-4">
-              {config.models.basic.map((model) => (
-                <ModelConfigCard
-                  key={model.id}
-                  model={model}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Reasoning Models */}
-        {config.models.reasoning && config.models.reasoning.length > 0 && (
-          <>
-            <Separator />
-            <section>
-              <h2 className="text-md font-medium mb-3 flex items-center gap-2">
-                Reasoning Models
-                <Badge variant="secondary" className="text-xs">
-                  {config.models.reasoning.length}
-                </Badge>
-              </h2>
-              <div className="grid gap-4">
-                {config.models.reasoning.map((model) => (
-                  <ModelConfigCard
-                    key={model.id}
-                    model={model}
-                  />
-                ))}
-              </div>
-            </section>
-          </>
-        )}
-
-        {/* Vision Models */}
-        {config.models.vision && config.models.vision.length > 0 && (
-          <>
-            <Separator />
-            <section>
-              <h2 className="text-md font-medium mb-3 flex items-center gap-2">
-                Vision Models
-                <Badge variant="secondary" className="text-xs">
-                  {config.models.vision.length}
-                </Badge>
-              </h2>
-              <div className="grid gap-4">
-                {config.models.vision.map((model) => (
-                  <ModelConfigCard
-                    key={model.id}
-                    model={model}
-                  />
-                ))}
-              </div>
-            </section>
-          </>
-        )}
+        {allModels.map(({ model, type }) => (
+          <ModelConfigCard key={model.id} model={model} />
+        ))}
       </main>
     </div>
   );

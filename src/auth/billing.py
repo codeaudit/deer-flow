@@ -17,8 +17,9 @@ PRICE_IDS = {
     "free": os.getenv("STRIPE_PRICE_FREE", ""),
     "plus": os.getenv("STRIPE_PRICE_PLUS", ""),
     "pro": os.getenv("STRIPE_PRICE_PRO", ""),
-    "ultra": os.getenv("STRIPE_PRICE_ULTRA", "")
+    "ultra": os.getenv("STRIPE_PRICE_ULTRA", ""),
 }
+
 
 class BillingService:
     @staticmethod
@@ -54,20 +55,24 @@ class BillingService:
         try:
             # For local development, we don't verify signatures
             event_dict = json.loads(payload)
-            event = stripe.Event.construct_from(
-                event_dict, stripe.api_key
-            )
-            
+            event = stripe.Event.construct_from(event_dict, stripe.api_key)
+
             if event.type == "checkout.session.completed":
                 session = event.data.object
-                await BillingService.handle_successful_payment(cast(Dict[str, Any], session))
+                await BillingService.handle_successful_payment(
+                    cast(Dict[str, Any], session)
+                )
             elif event.type == "customer.subscription.updated":
                 subscription = event.data.object
-                await BillingService.handle_subscription_updated(cast(Dict[str, Any], subscription))
+                await BillingService.handle_subscription_updated(
+                    cast(Dict[str, Any], subscription)
+                )
             elif event.type == "customer.subscription.deleted":
                 subscription = event.data.object
-                await BillingService.handle_subscription_deleted(cast(Dict[str, Any], subscription))
-                
+                await BillingService.handle_subscription_deleted(
+                    cast(Dict[str, Any], subscription)
+                )
+
         except Exception as e:
             raise Exception(f"Error handling webhook: {str(e)}")
 
@@ -76,24 +81,24 @@ class BillingService:
         """Handle successful checkout session completion."""
         try:
             client = await get_supabase_client()
-            
+
             # Get subscription and customer details
             subscription_id = session.get("subscription")
             customer_id = session.get("customer")
-            
+
             if not subscription_id or not customer_id:
                 raise ValueError("Missing subscription or customer ID")
-                
+
             subscription = stripe.Subscription.retrieve(str(subscription_id))
             customer = stripe.Customer.retrieve(str(customer_id))
-            
+
             # Update billing_customers table
             customer_data = {
                 "id": customer.id,
                 "email": customer.email,
-                "provider": "stripe"
+                "provider": "stripe",
             }
-            
+
             # Update billing_subscriptions table
             subscription_data = {
                 "id": subscription.id,
@@ -102,26 +107,30 @@ class BillingService:
                 "price_id": subscription.items.data[0].price.id,
                 "quantity": subscription.items.data[0].quantity,
                 "cancel_at_period_end": subscription.cancel_at_period_end,
-                "current_period_start": datetime.fromtimestamp(subscription.current_period_start),
-                "current_period_end": datetime.fromtimestamp(subscription.current_period_end),
+                "current_period_start": datetime.fromtimestamp(
+                    subscription.current_period_start
+                ),
+                "current_period_end": datetime.fromtimestamp(
+                    subscription.current_period_end
+                ),
                 "created": datetime.fromtimestamp(subscription.created),
-                "metadata": subscription.metadata
+                "metadata": subscription.metadata,
             }
-            
+
             # Use the service_role_upsert_customer_subscription RPC function
             client_ref_id = session.get("client_reference_id")
             if not client_ref_id:
                 raise ValueError("Missing client reference ID")
-                
+
             await client.rpc(
-                'service_role_upsert_customer_subscription',
+                "service_role_upsert_customer_subscription",
                 {
                     "account_id": client_ref_id,
                     "customer": customer_data,
-                    "subscription": subscription_data
-                }
+                    "subscription": subscription_data,
+                },
             ).execute()
-            
+
         except Exception as e:
             raise Exception(f"Error handling successful payment: {str(e)}")
 
@@ -130,27 +139,33 @@ class BillingService:
         """Handle subscription update events."""
         try:
             client = await get_supabase_client()
-            
+
             sub_id = subscription_data.get("id")
             if not sub_id:
                 raise ValueError("Missing subscription ID")
-                
+
             subscription = stripe.Subscription.retrieve(str(sub_id))
-            
+
             subscription_update = {
                 "id": subscription.id,
                 "status": subscription.status,
                 "price_id": subscription.items.data[0].price.id,
                 "quantity": subscription.items.data[0].quantity,
                 "cancel_at_period_end": subscription.cancel_at_period_end,
-                "current_period_start": datetime.fromtimestamp(subscription.current_period_start),
-                "current_period_end": datetime.fromtimestamp(subscription.current_period_end),
-                "metadata": subscription.metadata
+                "current_period_start": datetime.fromtimestamp(
+                    subscription.current_period_start
+                ),
+                "current_period_end": datetime.fromtimestamp(
+                    subscription.current_period_end
+                ),
+                "metadata": subscription.metadata,
             }
-            
+
             # Update subscription in database
-            await client.from_("billing_subscriptions").update(subscription_update).eq("id", subscription.id).execute()
-            
+            await client.from_("billing_subscriptions").update(subscription_update).eq(
+                "id", subscription.id
+            ).execute()
+
         except Exception as e:
             raise Exception(f"Error handling subscription update: {str(e)}")
 
@@ -159,16 +174,15 @@ class BillingService:
         """Handle subscription deletion events."""
         try:
             client = await get_supabase_client()
-            
+
             subscription_id = subscription_data.get("id")
             if not subscription_id:
                 raise ValueError("Missing subscription ID")
-            
+
             # Mark subscription as canceled in database
-            await client.from_("billing_subscriptions").update({
-                "status": "canceled",
-                "ended_at": datetime.now()
-            }).eq("id", str(subscription_id)).execute()
-            
+            await client.from_("billing_subscriptions").update(
+                {"status": "canceled", "ended_at": datetime.now()}
+            ).eq("id", str(subscription_id)).execute()
+
         except Exception as e:
-            raise Exception(f"Error handling subscription deletion: {str(e)}") 
+            raise Exception(f"Error handling subscription deletion: {str(e)}")

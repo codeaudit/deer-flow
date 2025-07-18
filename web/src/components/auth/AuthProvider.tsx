@@ -11,6 +11,7 @@ import type { ReactNode } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import type { User, Session, SupabaseClient } from '@supabase/supabase-js';
 import { useRouter, usePathname } from 'next/navigation';
+import { useSettingsStore, DEFAULT_SETTINGS } from "@/core/store/settings-store";
 
 type Account = {
   account_id: string;
@@ -58,6 +59,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [account, setAccount] = useState<Account | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const handleAccountChange = React.useCallback((newAccount: Account | null) => {
+    setAccount(newAccount);
+    useSettingsStore.setState({ accountId: newAccount?.account_id || null });
+    useSettingsStore.getState().hydrate();
+    if (newAccount?.account_id) {
+      // Initialize settings for new account if not present
+      const state = useSettingsStore.getState();
+      if (!state.accountSettings[newAccount.account_id]) {
+        // Try to load from localStorage for this account
+        const settingsKey = `deer-flow-settings-${newAccount.account_id}`;
+        const json = typeof window !== 'undefined' ? localStorage.getItem(settingsKey) : null;
+        let loadedSettings = null;
+        if (json) {
+          try {
+            loadedSettings = JSON.parse(json);
+          } catch (e) {
+            loadedSettings = null;
+          }
+        }
+        useSettingsStore.setState({
+          accountSettings: {
+            ...state.accountSettings,
+            [newAccount.account_id]: loadedSettings || JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
+          },
+        });
+      }
+    }
+  }, []);
+
   const fetchAccount = async (userId: string) => {
     try {
       console.log('Fetching account for user:', userId);
@@ -65,22 +95,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       
       if (error) {
         console.error('RPC error fetching account:', error);
-        // For now, don't block if account fetching fails
-        setAccount(null);
+        handleAccountChange(null);
         return;
       }
       
       console.log('Account data received:', data);
       if (data) {
-        setAccount(data);
+        handleAccountChange(data);
         console.log('Account set successfully');
       } else {
         console.log('No account data returned');
-        setAccount(null);
+        handleAccountChange(null);
       }
     } catch (error) {
       console.error('Exception fetching account:', error);
-      setAccount(null);
+      handleAccountChange(null);
     }
   };
 

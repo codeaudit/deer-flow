@@ -5,10 +5,10 @@ import base64
 import json
 import logging
 import os
-from typing import Annotated, List, cast
+from typing import Annotated, List, cast, Optional
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request, Depends, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from langchain_core.messages import (
@@ -46,6 +46,19 @@ from src.server.rag_request import (
 from src.server.config_request import ConfigResponse
 from src.llms.llm import get_configured_llm_models
 from src.tools import VolcengineTTS
+from src.backend.auth.middleware import get_user_id_from_request
+from src.llms.model_info import ModelInfo
+from src.llms.default_models import initialize_default_models_for_account
+from src.backend.database.user_context import get_user_session
+from src.llms.model_parameters import ModelParameters
+from src.backend.database.settings_crud import (
+    get_settings_by_user_id,
+    upsert_settings_by_user_id,
+)
+from src.backend.database.session import get_session
+from src.backend.auth.middleware import AuthMiddleware
+
+from fastapi import status
 
 logger = logging.getLogger(__name__)
 
@@ -66,31 +79,96 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
+# Add Auth middleware directly to the main app
+app.add_middleware(AuthMiddleware)
+
 graph = build_graph_with_memory()
 
 
+# Dependency to get current user ID
+async def get_current_user_id(request: Request) -> str:
+    """Get current user ID from request"""
+    user_id = get_user_id_from_request(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user_id
+
+
+# Dependency to get optional user ID (doesn't require authentication)
+async def get_optional_user_id(request: Request) -> Optional[str]:
+    """Get optional user ID from request"""
+    return get_user_id_from_request(request)
+
+
 @app.post("/api/chat/stream")
-async def chat_stream(request: ChatRequest):
-    thread_id = request.thread_id
+async def chat_stream(request: ChatRequest, request_obj: Request):
+    thread_id = request.thread_id or "__default__"
     if thread_id == "__default__":
         thread_id = str(uuid4())
+
+    # Get user ID from request if available
+    user_id = get_user_id_from_request(request_obj)
+
+    # Provide default values for parameters that may be None
+    messages = request.model_dump().get("messages") or []
+    resources = request.resources if request.resources is not None else []
+    max_plan_iterations = (
+        request.max_plan_iterations if request.max_plan_iterations is not None else 1
+    )
+    max_step_num = request.max_step_num if request.max_step_num is not None else 3
+    max_search_results = (
+        request.max_search_results if request.max_search_results is not None else 3
+    )
+    auto_accepted_plan = (
+        request.auto_accepted_plan if request.auto_accepted_plan is not None else False
+    )
+    interrupt_feedback = (
+        request.interrupt_feedback if request.interrupt_feedback is not None else ""
+    )
+    custom_prompts = (
+        request.custom_prompts if request.custom_prompts is not None else {}
+    )
+    selected_models = (
+        request.selected_models if request.selected_models is not None else {}
+    )
+    model_parameters = (
+        request.model_parameters if request.model_parameters is not None else {}
+    )
+    mcp_settings = request.mcp_settings if request.mcp_settings is not None else {}
+    enable_background_investigation = (
+        request.enable_background_investigation
+        if request.enable_background_investigation is not None
+        else True
+    )
+    report_style = (
+        request.report_style
+        if request.report_style is not None
+        else ReportStyle.ACADEMIC
+    )
+    enable_deep_thinking = (
+        request.enable_deep_thinking
+        if request.enable_deep_thinking is not None
+        else False
+    )
+
     return StreamingResponse(
         _astream_workflow_generator(
-            request.model_dump()["messages"],
+            messages,
             thread_id,
-            request.resources,
-            request.max_plan_iterations,
-            request.max_step_num,
-            request.max_search_results,
-            request.auto_accepted_plan,
-            request.interrupt_feedback,
-            request.mcp_settings,
-            request.enable_background_investigation,
-            request.report_style,
-            request.enable_deep_thinking,
-            request.custom_prompts,
-            request.selected_models,
-            request.model_parameters,
+            resources,
+            max_plan_iterations,
+            max_step_num,
+            max_search_results,
+            auto_accepted_plan,
+            interrupt_feedback,
+            mcp_settings,
+            enable_background_investigation,
+            report_style,
+            enable_deep_thinking,
+            custom_prompts,
+            selected_models,
+            model_parameters,
+            user_id,
         ),
         media_type="text/event-stream",
     )
@@ -109,9 +187,10 @@ async def _astream_workflow_generator(
     enable_background_investigation: bool,
     report_style: ReportStyle,
     enable_deep_thinking: bool,
-    custom_prompts: dict = None,
-    selected_models: dict = None,
-    model_parameters: dict = None,
+    custom_prompts: dict = {},
+    selected_models: dict = {},
+    model_parameters: dict = {},
+    user_id: Optional[str] = None,
 ):
     # Import Command here to avoid circular imports
     from langgraph.types import Command
@@ -151,6 +230,7 @@ async def _astream_workflow_generator(
                 "custom_prompts": custom_prompts,
                 "selected_models": selected_models,
                 "model_parameters": model_parameters,
+                "user_id": user_id,  # Pass user_id to graph
             }
         },
         stream_mode=["messages", "updates"],
@@ -243,16 +323,29 @@ async def text_to_speech(request: TTSRequest):
             cluster=cluster,
             voice_type=voice_type,
         )
+        # Provide default values for request fields that may be None
+        encoding = request.encoding if request.encoding is not None else "mp3"
+        speed_ratio = request.speed_ratio if request.speed_ratio is not None else 1.0
+        volume_ratio = request.volume_ratio if request.volume_ratio is not None else 1.0
+        pitch_ratio = request.pitch_ratio if request.pitch_ratio is not None else 1.0
+        text_type = request.text_type if request.text_type is not None else "plain"
+        with_frontend = (
+            request.with_frontend if request.with_frontend is not None else 1
+        )
+        frontend_type = (
+            request.frontend_type if request.frontend_type is not None else "unitTson"
+        )
+
         # Call the TTS API
         result = tts_client.text_to_speech(
             text=request.text[:1024],
-            encoding=request.encoding,
-            speed_ratio=request.speed_ratio,
-            volume_ratio=request.volume_ratio,
-            pitch_ratio=request.pitch_ratio,
-            text_type=request.text_type,
-            with_frontend=request.with_frontend,
-            frontend_type=request.frontend_type,
+            encoding=encoding,
+            speed_ratio=speed_ratio,
+            volume_ratio=volume_ratio,
+            pitch_ratio=pitch_ratio,
+            text_type=text_type,
+            with_frontend=with_frontend,
+            frontend_type=frontend_type,
         )
 
         if not result["success"]:
@@ -264,11 +357,9 @@ async def text_to_speech(request: TTSRequest):
         # Return the audio file
         return Response(
             content=audio_data,
-            media_type=f"audio/{request.encoding}",
+            media_type=f"audio/{encoding}",
             headers={
-                "Content-Disposition": (
-                    f"attachment; filename=tts_output.{request.encoding}"
-                )
+                "Content-Disposition": f"attachment; filename=tts_output.{encoding}"
             },
         )
 
@@ -378,9 +469,11 @@ async def enhance_prompt(request: EnhancePromptRequest):
         raise HTTPException(status_code=500, detail=INTERNAL_SERVER_ERROR_DETAIL)
 
 
-@app.post("/api/mcp/server/metadata", response_model=MCPServerMetadataResponse)
+@app.post("/api/mcp/server/metadata")
 async def mcp_server_metadata(request: MCPServerMetadataRequest):
     """Get information about an MCP server."""
+    import time
+
     try:
         # Set default timeout with a longer value for this endpoint
         timeout = 300  # Default to 300 seconds for this endpoint
@@ -399,16 +492,31 @@ async def mcp_server_metadata(request: MCPServerMetadataRequest):
             timeout_seconds=timeout,
         )
 
-        # Create the response with tools
-        response = MCPServerMetadataResponse(
-            transport=request.transport,
-            command=request.command,
-            args=request.args,
-            url=request.url,
-            env=request.env,
-            tools=tools,
-        )
+        now = int(time.time() * 1000)
+        # Determine the name: prefer request.name, fallback to command/url, else 'unknown'
+        name = request.name
+        if not name:
+            if request.command:
+                name = request.command
+            elif request.url:
+                name = request.url
+            else:
+                name = "unknown"
 
+        # Always include all required fields in the response
+        response = {
+            "name": name,
+            "transport": request.transport,
+            "command": request.command,
+            "args": request.args,
+            "url": request.url,
+            "env": request.env,
+            "tools": tools,
+            "enabled": True,
+            "createdAt": now,
+            "updatedAt": now,
+            "account_id": "",
+        }
         return response
     except Exception as e:
         logger.exception(f"Error in MCP server metadata endpoint: {str(e)}")
@@ -448,3 +556,86 @@ async def config():
         rag=RAGConfigResponse(provider=SELECTED_RAG_PROVIDER),
         models=formatted_models,
     )
+
+
+@app.get("/api/models")
+async def get_account_models(user_id: str = Depends(get_current_user_id)):
+    """
+    Get all models for the authenticated account. Ensures default models are initialized.
+    """
+    async for session in get_user_session(user_id):
+        # Ensure default models are initialized
+        await initialize_default_models_for_account(user_id, session)
+        # Fetch all models for this account
+        models = await ModelInfo.get_for_account(session, user_id)
+        return {"models": [m.to_dict() for m in models]}
+
+
+@app.get("/api/model-parameters")
+async def list_model_parameters(user_id: str = Depends(get_current_user_id)):
+    async for session in get_user_session(user_id):
+        params = await ModelParameters.get_for_account(session, user_id)
+        return {"parameters": [p.to_dict() for p in params]}
+
+
+@app.get("/api/model-parameters/{model_id}")
+async def get_model_parameters(
+    model_id: str, user_id: str = Depends(get_current_user_id)
+):
+    async for session in get_user_session(user_id):
+        param = await ModelParameters.get_for_model(session, user_id, model_id)
+        if not param:
+            raise HTTPException(status_code=404, detail="Model parameters not found")
+        return param.to_dict()
+
+
+@app.post("/api/model-parameters/{model_id}")
+async def upsert_model_parameters(
+    model_id: str,
+    params: dict = Body(...),
+    user_id: str = Depends(get_current_user_id),
+):
+    allowed_keys = {"temperature", "max_tokens", "top_p", "frequency_penalty"}
+    filtered = {k: v for k, v in params.items() if k in allowed_keys}
+    async for session in get_user_session(user_id):
+        obj = await ModelParameters.upsert(session, user_id, model_id, filtered)
+        return obj.to_dict()
+
+
+@app.delete("/api/model-parameters/{model_id}")
+async def delete_model_parameters(
+    model_id: str, user_id: str = Depends(get_current_user_id)
+):
+    async for session in get_user_session(user_id):
+        ok = await ModelParameters.delete_for_model(session, user_id, model_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Model parameters not found")
+        return {"success": True}
+
+
+@app.get("/api/settings")
+async def get_user_settings(user_id: str = Depends(get_current_user_id)):
+    DEFAULT_SETTINGS = {
+        "flows": [],
+        "activeFlowId": "",
+        "modelParameters": {},
+        "mcp": {"servers": [], "preRegistered": []},
+    }
+    async for session in get_user_session(user_id):
+        settings = await get_settings_by_user_id(session, user_id)
+        if settings is None:
+            # Auto-create default settings for new user
+            settings = await upsert_settings_by_user_id(
+                session, user_id, DEFAULT_SETTINGS
+            )
+        return {"settings": settings}
+
+
+@app.post("/api/settings")
+async def update_user_settings(
+    settings: dict = Body(...),
+    user_id: str = Depends(get_current_user_id),
+):
+    async for session in get_user_session(user_id):
+        updated = await upsert_settings_by_user_id(session, user_id, settings)
+        return {"settings": updated}

@@ -37,7 +37,16 @@ export type SimpleSSEMCPServerMetadata = Omit<
   "enabled" | "tools" | "createdAt" | "updatedAt"
 >;
 
-export type MCPServerMetadata = StdioMCPServerMetadata | SSEMCPServerMetadata;
+export type MCPServerMetadata = {
+  name: string;
+  transport: string;
+  enabled: boolean;
+  env?: Record<string, string>;
+  tools: MCPToolMetadata[];
+  createdAt: number;
+  updatedAt: number;
+  account_id: string;
+};
 export type SimpleMCPServerMetadata =
   | SimpleStdioMCPServerMetadata
   | SimpleSSEMCPServerMetadata;

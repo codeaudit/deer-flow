@@ -571,3 +571,11 @@ Your unwavering commitment and expertise have been the driving force behind Deer
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.com/#bytedance/deer-flow&Date)
+
+## Settings API Integration (2025-07)
+
+- All user and account settings are now loaded and saved via the backend API (`/api/settings`).
+- The frontend must be configured with `NEXT_PUBLIC_API_URL` pointing to the backend (e.g., `http://localhost:8000/api/`).
+- The settings store no longer uses localStorage; all persistence is handled server-side.
+- Ensure the backend server is running and accessible for settings to load and save correctly.
+- If you see 404 errors for `/api/settings`, check your API URL configuration and backend server status.

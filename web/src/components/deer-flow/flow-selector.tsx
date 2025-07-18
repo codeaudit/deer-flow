@@ -73,7 +73,7 @@ export function FlowSelector({ className, onOpenSettings }: FlowSelectorProps) {
           <CommandInput placeholder="Search flows..." />
           <CommandEmpty>No flows found.</CommandEmpty>
           <CommandGroup>
-            {allFlows.map((flow) => (
+            {allFlows && allFlows.map((flow) => (
               <CommandItem
                 key={flow.id}
                 value={flow.name}

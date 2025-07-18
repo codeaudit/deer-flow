@@ -5,18 +5,13 @@
 
 import { ArrowLeft, Menu, X } from "lucide-react";
 import Link from "next/link";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useReplay } from "@/core/replay";
-import {
-  type SettingsState,
-  changeSettings,
-  saveSettings,
-  useSettingsStore,
-} from "@/core/store";
+import { useSettingsStore } from "@/core/store/settings-store";
 import { cn } from "@/lib/utils";
 
 import { SETTINGS_TABS } from "./tabs";
@@ -24,8 +19,8 @@ import { SETTINGS_TABS } from "./tabs";
 function SettingsPageContent() {
   const { isReplay } = useReplay();
   const [activeTabId, setActiveTabId] = useState(SETTINGS_TABS[0]!.id);
-  const [settings, setSettings] = useState(useSettingsStore.getState());
-  const [changes, setChanges] = useState<Partial<SettingsState>>({});
+  const [settings, setSettings] = useState(useSettingsStore.getState() || {});
+  const [changes, setChanges] = useState<Partial<any>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -34,12 +29,25 @@ function SettingsPageContent() {
   }, []);
 
   const handleTabChange = useCallback(
-    (newChanges: Partial<SettingsState>) => {
+    (newChanges: Partial<any>) => {
       setTimeout(() => {
-        setChanges((prev) => ({
-          ...prev,
-          ...newChanges,
-        }));
+        setChanges((prev) => {
+          // Deep merge for mcp
+          if (newChanges.mcp && prev.mcp) {
+            return {
+              ...prev,
+              ...newChanges,
+              mcp: {
+                ...prev.mcp,
+                ...newChanges.mcp,
+              },
+            };
+          }
+          return {
+            ...prev,
+            ...newChanges,
+          };
+        });
       }, 0);
     },
     [],
@@ -48,16 +56,31 @@ function SettingsPageContent() {
   const handleSave = useCallback(() => {
     if (Object.keys(changes).length > 0) {
       setIsSaving(true);
-      const newSettings: SettingsState = {
-        ...settings,
-        ...changes,
+      const newSettings: any = {
+        ...(settings || {}),
+        ...(changes || {}),
       };
-      setSettings(newSettings);
+      setSettings(newSettings as any);
       setChanges({});
-      changeSettings(newSettings);
-      saveSettings();
       
-      // Show saving state briefly
+      // Get the current account ID
+      const accountId = useSettingsStore.getState().accountId || 'default';
+      
+      // Check if the changes contain accountSettings structure
+      if (newSettings.accountSettings && newSettings.accountSettings[accountId]) {
+        // Extract the settings for the current account from accountSettings
+        const accountSettings = newSettings.accountSettings[accountId];
+        // Save only the account-specific settings to the backend
+        useSettingsStore.getState().save(accountSettings);
+      } else if (newSettings.accountSettings && newSettings.accountSettings.default) {
+        // If accountSettings exists but not for this account, save default settings
+        const defaultSettings = newSettings.accountSettings.default;
+        useSettingsStore.getState().save(defaultSettings);
+      } else {
+        // If no accountSettings structure, save the changes directly
+        useSettingsStore.getState().save(changes);
+      }
+      
       setTimeout(() => {
         setIsSaving(false);
       }, 500);
@@ -65,24 +88,22 @@ function SettingsPageContent() {
   }, [settings, changes]);
 
   useEffect(() => {
-    setSettings(useSettingsStore.getState());
+    setSettings((useSettingsStore.getState() || {}) as Record<string, any>);
   }, []);
 
-  // Auto-save changes as they occur
   useEffect(() => {
     if (Object.keys(changes).length > 0) {
       const timeoutId = setTimeout(() => {
         handleSave();
-      }, 1000); // Auto-save after 1 second of inactivity
-
+      }, 1000);
       return () => clearTimeout(timeoutId);
     }
   }, [changes, handleSave]);
 
-  const mergedSettings = useMemo<SettingsState>(() => {
+  const mergedSettings = useMemo<any>(() => {
     return {
-      ...settings,
-      ...changes,
+      ...(settings || {}),
+      ...(changes || {}),
     };
   }, [settings, changes]);
 
@@ -203,16 +224,55 @@ function SettingsPageContent() {
 }
 
 export default function SettingsPage() {
-  return (
-    <Suspense fallback={
+  const settings = useSettingsStore((s: any) => s.settings);
+  const loading = useSettingsStore((s: any) => s.loading);
+  const error = useSettingsStore((s: any) => s.error);
+  const hydrate = useSettingsStore((s: any) => s.hydrate);
+
+  useEffect(() => {
+    hydrate();
+  }, [hydrate]);
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
       <div className="flex h-screen items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-2">Loading Settings...</h1>
-          <p className="text-muted-foreground">Please wait while we prepare your settings page</p>
+          <p className="text-destructive">Error loading settings: {String(error)}</p>
+          <button
+            onClick={() => hydrate()}
+            className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md"
+          >
+            Retry
+          </button>
         </div>
       </div>
-    }>
-      <SettingsPageContent />
-    </Suspense>
-  );
+    );
+  }
+
+  if (!settings) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <p className="text-muted-foreground">No settings found.</p>
+          <button
+            onClick={() => hydrate()}
+            className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md"
+          >
+            Load Settings
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Render the actual settings content
+  return <SettingsPageContent />;
 } 

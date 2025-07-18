@@ -7,6 +7,7 @@ import { env } from "@/env";
 
 import type { DeerFlowConfig } from "../config";
 import { useReplay } from "../replay";
+import { useAuth } from "@/components/auth/AuthProvider";
 
 import { fetchReplayTitle } from "./chat";
 import { resolveServiceURL } from "./resolve-service-url";
@@ -48,6 +49,7 @@ export function useConfig(): {
   config: DeerFlowConfig | null;
   loading: boolean;
 } {
+  const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [config, setConfig] = useState<DeerFlowConfig | null>(null);
 
@@ -56,7 +58,11 @@ export function useConfig(): {
       setLoading(false);
       return;
     }
-    fetch(resolveServiceURL("config"))
+    const headers: Record<string, string> = {};
+    if (session?.access_token) {
+      headers["Authorization"] = `Bearer ${session.access_token}`;
+    }
+    fetch(resolveServiceURL("config"), { headers })
       .then((res) => res.json())
       .then((config) => {
         setConfig(config);
@@ -65,7 +71,6 @@ export function useConfig(): {
       .catch((err) => {
         console.error("Failed to fetch config", err);
         console.warn("Using fallback configuration. Please ensure the backend API is running at:", resolveServiceURL("config"));
-        
         // Provide fallback configuration to prevent crashes
         const fallbackConfig: DeerFlowConfig = {
           rag: {
@@ -77,11 +82,10 @@ export function useConfig(): {
             vision: []
           }
         };
-        
         setConfig(fallbackConfig);
         setLoading(false);
       });
-  }, []);
+  }, [session?.access_token]);
 
   return { config, loading };
 }

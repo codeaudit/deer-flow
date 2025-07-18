@@ -3,7 +3,7 @@
 
 import { motion } from "framer-motion";
 import { Blocks, PencilRuler, Trash, Globe } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 
 import { Tooltip } from "@/components/deer-flow/tooltip";
 import { Button } from "@/components/ui/button";
@@ -14,33 +14,60 @@ import {
   getPreRegisteredMCPs, 
   togglePreRegisteredMCP, 
   useSettingsStore,
+  type SettingsState,
 } from "@/core/store/settings-store";
 import { cn } from "@/lib/utils";
 
 import { AddMCPServerDialog } from "../dialogs/add-mcp-server-dialog";
+import { useAuth } from "@/components/auth/AuthProvider";
 
 import type { Tab } from "./types";
 
-export const MCPTab: Tab = ({ settings, onChange }) => {
+export const MCPTab: Tab = ({ settings, onChange }: { settings: SettingsState; onChange: (changes: Partial<SettingsState>) => void }) => {
+  const { account } = useAuth(); // Get current account
+  
+  // Extract the actual settings from the store state
+  const accountId = account?.account_id || 'default';
+  const accountSettings = settings.accountSettings?.[accountId] || {
+    flows: [],
+    activeFlowId: "",
+    modelParameters: {},
+    mcp: { servers: [], preRegistered: [] }
+  };
+  
   const [servers, setServers] = useState<MCPServerMetadata[]>(
-    settings.mcp.servers,
+    Array.isArray(accountSettings?.mcp?.servers) ? accountSettings.mcp.servers : [],
   );
   const [newlyAdded, setNewlyAdded] = useState(false);
   
+  // Sync local state with settings prop changes
+  useEffect(() => {
+    const currentServers = Array.isArray(accountSettings?.mcp?.servers) ? accountSettings.mcp.servers : [];
+    setServers(currentServers);
+  }, [accountSettings?.mcp?.servers]);
+  
   // Always get fresh data from the store to avoid stale state
-  const preRegistered = getPreRegisteredMCPs();
+  const preRegistered = Array.isArray(getPreRegisteredMCPs()) ? getPreRegisteredMCPs() : [];
 
   const handleAddServers = useCallback(
     (servers: MCPServerMetadata[]) => {
-      const merged = mergeServers(settings.mcp.servers, servers);
-      setServers(merged);
-      onChange({ 
-        ...settings, 
-        mcp: { 
-          ...settings.mcp, 
-          servers: merged 
-        } 
+      const merged = mergeServers(
+        Array.isArray(accountSettings?.mcp?.servers) ? accountSettings.mcp.servers : [],
+        servers
+      );
+      onChange({
+        accountSettings: {
+          ...settings.accountSettings,
+          [accountId]: {
+            ...accountSettings,
+            mcp: {
+              ...(accountSettings.mcp || { servers: [], preRegistered: [] }),
+              servers: merged,
+            },
+          },
+        },
       });
+      setServers(merged);
       setNewlyAdded(true);
       setTimeout(() => {
         setNewlyAdded(false);
@@ -52,41 +79,51 @@ export const MCPTab: Tab = ({ settings, onChange }) => {
         });
       }, 100);
     },
-    [onChange, settings],
+    [onChange, settings, accountSettings, accountId],
   );
 
   const handleDeleteServer = useCallback(
     (name: string) => {
-      const merged = settings.mcp.servers.filter(
+      const merged = accountSettings.mcp.servers.filter(
         (server) => server.name !== name,
       );
       setServers(merged);
       onChange({ 
-        ...settings, 
-        mcp: { 
-          ...settings.mcp, 
-          servers: merged 
-        } 
+        accountSettings: {
+          ...settings.accountSettings,
+          [accountId]: {
+            ...accountSettings,
+            mcp: { 
+              ...accountSettings.mcp, 
+              servers: merged 
+            }
+          },
+        },
       });
     },
-    [onChange, settings],
+    [onChange, settings, accountSettings, accountId],
   );
 
   const handleToggleCustomServer = useCallback(
     (name: string, enabled: boolean) => {
-      const merged = settings.mcp.servers.map((server) =>
+      const merged = accountSettings.mcp.servers.map((server) =>
         server.name === name ? { ...server, enabled } : server,
       );
       setServers(merged);
       onChange({ 
-        ...settings, 
-        mcp: { 
-          ...settings.mcp, 
-          servers: merged 
-        } 
+        accountSettings: {
+          ...settings.accountSettings,
+          [accountId]: {
+            ...accountSettings,
+            mcp: { 
+              ...accountSettings.mcp, 
+              servers: merged 
+            }
+          },
+        },
       });
     },
-    [onChange, settings],
+    [onChange, settings, accountSettings, accountId],
   );
 
   const handleTogglePreRegistered = useCallback(
@@ -112,6 +149,11 @@ export const MCPTab: Tab = ({ settings, onChange }) => {
 
   return (
     <div className="flex flex-col gap-6">
+      {account && (
+        <div className="text-sm text-muted-foreground mb-4">
+          Managing MCP servers for account: {account.name}
+        </div>
+      )}
       <header>
         <div className="flex items-center justify-between gap-2">
           <h1 className="text-lg font-medium">MCP Servers</h1>
@@ -142,64 +184,71 @@ export const MCPTab: Tab = ({ settings, onChange }) => {
         </div>
         
         <ul className="flex flex-col gap-3">
-          {preRegistered.map((preServer) => {
-            const isGloballyEnabled = preServer.enabled;
+          {preRegistered.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Blocks size={48} className="mx-auto mb-4 opacity-50" />
+              <p>No built-in MCP servers configured yet.</p>
+            </div>
+          ) : (
+            preRegistered.map((preServer) => {
+              const isGloballyEnabled = preServer.enabled;
             
-            return (
-              <li
-                key={preServer.name}
-                className={cn(
-                  "!bg-card group relative overflow-hidden rounded-lg border pb-2 shadow duration-300",
-                  !isGloballyEnabled && "opacity-60"
-                )}
-              >
-                <div className="flex flex-col items-start px-4 py-3">
-                  <div className="flex items-center justify-between w-full mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="text-base font-medium">{preServer.displayName}</div>
-                      <div className="bg-blue-500 text-white h-fit rounded px-1.5 py-0.5 text-xs">
-                        Built-in
-                      </div>
-                      {!isGloballyEnabled && (
-                        <div className="bg-muted text-muted-foreground h-fit rounded px-1.5 py-0.5 text-xs">
-                          Disabled
+              return (
+                <li
+                  key={preServer.name}
+                  className={cn(
+                    "!bg-card group relative overflow-hidden rounded-lg border pb-2 shadow duration-300",
+                    !isGloballyEnabled && "opacity-60"
+                  )}
+                >
+                  <div className="flex flex-col items-start px-4 py-3">
+                    <div className="flex items-center justify-between w-full mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="text-base font-medium">{preServer.displayName}</div>
+                        <div className="bg-blue-500 text-white h-fit rounded px-1.5 py-0.5 text-xs">
+                          Built-in
                         </div>
-                      )}
-                    </div>
-                    
-                    {/* Global toggle only */}
-                    <div className="flex items-center gap-2">
-                      <Globe size={14} />
-                      <Tooltip title={`${isGloballyEnabled ? 'Disable globally' : 'Enable globally'} - controls availability for all flows`}>
-                        <Switch
-                          checked={isGloballyEnabled}
-                          onCheckedChange={(enabled) => handleTogglePreRegistered(preServer.name, enabled)}
-                        />
-                      </Tooltip>
-                    </div>
-                  </div>
-                  
-                  <p className="text-sm text-muted-foreground mb-3">
-                    {preServer.description}
-                  </p>
-                  
-                  <div className="flex flex-wrap items-center gap-2">
-                    <PencilRuler size={16} />
-                    {preServer.tools.map((tool) => (
-                      <div
-                        key={tool.name}
-                        className="text-muted-foreground border-muted-foreground w-fit rounded-md border px-2 py-1"
-                      >
-                        <Tooltip title={tool.description}>
-                          <div className="text-sm">{tool.name}</div>
+                        {!isGloballyEnabled && (
+                          <div className="bg-muted text-muted-foreground h-fit rounded px-1.5 py-0.5 text-xs">
+                            Disabled
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Global toggle only */}
+                      <div className="flex items-center gap-2">
+                        <Globe size={14} />
+                        <Tooltip title={`${isGloballyEnabled ? 'Disable globally' : 'Enable globally'} - controls availability for all flows`}>
+                          <Switch
+                            checked={isGloballyEnabled}
+                            onCheckedChange={(enabled) => handleTogglePreRegistered(preServer.name, enabled)}
+                          />
                         </Tooltip>
                       </div>
-                    ))}
+                    </div>
+                    
+                    <p className="text-sm text-muted-foreground mb-3">
+                      {preServer.description}
+                    </p>
+                    
+                    <div className="flex flex-wrap items-center gap-2">
+                      <PencilRuler size={16} />
+                      {preServer.tools.map((tool) => (
+                        <div
+                          key={tool.name}
+                          className="text-muted-foreground border-muted-foreground w-fit rounded-md border px-2 py-1"
+                        >
+                          <Tooltip title={tool.description}>
+                            <div className="text-sm">{tool.name}</div>
+                          </Tooltip>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              </li>
-            );
-          })}
+                </li>
+              );
+            })
+          )}
         </ul>
       </section>
 

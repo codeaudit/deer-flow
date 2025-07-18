@@ -55,7 +55,7 @@ export const FlowLibraryTab: Tab = ({
   const [newFlowName, setNewFlowName] = useState<string>("");
   const [isCreatingFlow, setIsCreatingFlow] = useState<boolean>(false);
 
-  const selectedFlow = settings.flows.find(flow => flow.id === selectedFlowId) ?? settings.flows[0];
+  const selectedFlow = settings.flows?.find(flow => flow.id === selectedFlowId) ?? settings.flows?.[0];
 
   const handleCreateFlow = useCallback(() => {
     if (newFlowName.trim()) {

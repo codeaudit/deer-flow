@@ -734,3 +734,107 @@ class TestGenerateProseEndpoint:
         response = client.post("/api/prose/generate", json=request_data)
         assert response.status_code == 500
         assert response.json()["detail"] == "Internal Server Error"
+
+
+class TestModelParametersEndpoints:
+    @pytest.fixture(autouse=True)
+    def setup(self, client):
+        self.client = client
+        self.user_id = "test-user"
+        self.model_id = "test-model"
+        self.default_params = {
+            "temperature": 0.7,
+            "max_tokens": 2048,
+            "top_p": 0.9,
+            "frequency_penalty": 0.0,
+        }
+
+    @patch("src.backend.auth.middleware.verify_token", return_value="test-user")
+    @patch("src.server.app.get_user_session")
+    @patch("src.llms.model_parameters.ModelParameters.get_for_account")
+    def test_list_model_parameters(
+        self, mock_get_for_account, mock_get_user_session, mock_verify_token
+    ):
+        mock_get_user_session.return_value.__aiter__.return_value = [MagicMock()]
+        mock_param = MagicMock()
+        mock_param.to_dict.return_value = {
+            "model_id": self.model_id,
+            **self.default_params,
+        }
+        mock_get_for_account.return_value = [mock_param]
+        response = self.client.get(
+            "/api/model-parameters", headers={"Authorization": "Bearer test-token"}
+        )
+        assert response.status_code == 200
+        assert response.json()["parameters"][0]["model_id"] == self.model_id
+
+    @patch("src.backend.auth.middleware.verify_token", return_value="test-user")
+    @patch("src.server.app.get_user_session")
+    @patch("src.llms.model_parameters.ModelParameters.get_for_model")
+    def test_get_model_parameters(
+        self, mock_get_for_model, mock_get_user_session, mock_verify_token
+    ):
+        mock_get_user_session.return_value.__aiter__.return_value = [MagicMock()]
+        mock_param = MagicMock()
+        mock_param.to_dict.return_value = {
+            "model_id": self.model_id,
+            **self.default_params,
+        }
+        mock_get_for_model.return_value = mock_param
+        response = self.client.get(
+            f"/api/model-parameters/{self.model_id}",
+            headers={"Authorization": "Bearer test-token"},
+        )
+        assert response.status_code == 200
+        assert response.json()["model_id"] == self.model_id
+
+    @patch("src.backend.auth.middleware.verify_token", return_value="test-user")
+    @patch("src.server.app.get_user_session")
+    @patch("src.llms.model_parameters.ModelParameters.upsert")
+    def test_upsert_model_parameters(
+        self, mock_upsert, mock_get_user_session, mock_verify_token
+    ):
+        mock_get_user_session.return_value.__aiter__.return_value = [MagicMock()]
+        mock_param = MagicMock()
+        mock_param.to_dict.return_value = {
+            "model_id": self.model_id,
+            **self.default_params,
+        }
+        mock_upsert.return_value = mock_param
+        response = self.client.post(
+            f"/api/model-parameters/{self.model_id}",
+            json=self.default_params,
+            headers={"Authorization": "Bearer test-token"},
+        )
+        assert response.status_code == 200
+        assert response.json()["model_id"] == self.model_id
+
+    @patch("src.backend.auth.middleware.verify_token", return_value="test-user")
+    @patch("src.server.app.get_user_session")
+    @patch("src.llms.model_parameters.ModelParameters.delete_for_model")
+    def test_delete_model_parameters(
+        self, mock_delete_for_model, mock_get_user_session, mock_verify_token
+    ):
+        mock_get_user_session.return_value.__aiter__.return_value = [MagicMock()]
+        mock_delete_for_model.return_value = True
+        response = self.client.delete(
+            f"/api/model-parameters/{self.model_id}",
+            headers={"Authorization": "Bearer test-token"},
+        )
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+
+    @patch("src.backend.auth.middleware.verify_token", return_value="test-user")
+    @patch("src.server.app.get_user_session")
+    @patch("src.llms.model_parameters.ModelParameters.delete_for_model")
+    def test_delete_model_parameters_not_found(
+        self, mock_delete_for_model, mock_get_user_session, mock_verify_token
+    ):
+        mock_get_user_session.return_value.__aiter__.return_value = [MagicMock()]
+        mock_delete_for_model.return_value = False
+        response = self.client.delete(
+            f"/api/model-parameters/{self.model_id}",
+            headers={"Authorization": "Bearer test-token"},
+        )
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Model parameters not found"

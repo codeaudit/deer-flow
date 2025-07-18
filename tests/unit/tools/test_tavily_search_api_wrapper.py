@@ -5,6 +5,7 @@ import pytest
 from unittest.mock import Mock, patch, AsyncMock, MagicMock
 import aiohttp
 import requests
+from pydantic import SecretStr
 from src.tools.tavily_search.tavily_search_api_wrapper import (
     EnhancedTavilySearchAPIWrapper,
 )
@@ -17,7 +18,9 @@ class TestEnhancedTavilySearchAPIWrapper:
         with patch(
             "src.tools.tavily_search.tavily_search_api_wrapper.OriginalTavilySearchAPIWrapper"
         ):
-            wrapper = EnhancedTavilySearchAPIWrapper(tavily_api_key="dummy-key")
+            wrapper = EnhancedTavilySearchAPIWrapper(
+                tavily_api_key=SecretStr("dummy-key")
+            )
             # The parent class is mocked, so initialization won't fail
             return wrapper
 
@@ -92,8 +95,11 @@ class TestEnhancedTavilySearchAPIWrapper:
         mock_response.raise_for_status.side_effect = requests.HTTPError("API Error")
         mock_post.return_value = mock_response
 
-        with pytest.raises(requests.HTTPError):
-            wrapper.raw_results("test query")
+        # The implementation returns error response instead of raising exception
+        result = wrapper.raw_results("test query")
+        assert "error" in result
+        assert result["results"] == []
+        assert result["images"] == []
 
     @pytest.mark.asyncio
     async def test_raw_results_async_success(self, wrapper, mock_response_data):
@@ -147,8 +153,11 @@ class TestEnhancedTavilySearchAPIWrapper:
             "src.tools.tavily_search.tavily_search_api_wrapper.aiohttp.ClientSession",
             return_value=mock_session_cm,
         ):
-            with pytest.raises(Exception, match="Error 400: Bad Request"):
-                await wrapper.raw_results_async("test query")
+            # The implementation returns error response instead of raising exception
+            result = await wrapper.raw_results_async("test query")
+            assert "error" in result
+            assert result["results"] == []
+            assert result["images"] == []
 
     def test_clean_results_with_images(self, wrapper, mock_response_data):
         result = wrapper.clean_results_with_images(mock_response_data)

@@ -4,7 +4,8 @@ Script to show the modifications needed for src/workflow.py
 This shows the changes needed to integrate billing into deer-flow's workflow system
 """
 
-print("""
+print(
+    """
 ========================================
 deer-flow Workflow Integration Guide
 ========================================
@@ -12,9 +13,11 @@ deer-flow Workflow Integration Guide
 The following changes need to be made to src/workflow.py:
 
 1. Add imports:
-""")
+"""
+)
 
-print("""
+print(
+    """
 # Add these imports at the top of src/workflow.py
 import time
 import uuid
@@ -23,13 +26,17 @@ from src.auth.billing import (
     create_workflow_execution, 
     update_workflow_execution
 )
-""")
+"""
+)
 
-print("""
+print(
+    """
 2. Modify the run_agent_workflow_async function:
-""")
+"""
+)
 
-print("""
+print(
+    """
 # Replace the existing function signature with:
 async def run_agent_workflow_async(
     user_input: str,
@@ -130,13 +137,17 @@ async def run_agent_workflow_async(
     except Exception as e:
         logger.error(f"Error running workflow: {str(e)}")
         raise
-""")
+"""
+)
 
-print("""
+print(
+    """
 3. Update the State class in src/graph/types.py:
-""")
+"""
+)
 
-print("""
+print(
+    """
 # Add these fields to the State class:
 class State(MessagesState):
     # ... existing fields ...
@@ -145,13 +156,17 @@ class State(MessagesState):
     account_id: str = None
     execution_id: str = None
     thread_id: str = None
-""")
+"""
+)
 
-print("""
+print(
+    """
 4. Optional: Add token counting (if not already implemented):
-""")
+"""
+)
 
-print("""
+print(
+    """
 # Add this helper function to track token usage
 def extract_total_tokens(final_state: State) -> int:
     \"\"\"Extract total token count from workflow execution.\"\"\"
@@ -166,9 +181,11 @@ def extract_total_tokens(final_state: State) -> int:
     # Add any other token counting logic specific to your implementation
     
     return total_tokens
-""")
+"""
+)
 
-print("""
+print(
+    """
 ========================================
 Summary of Changes:
 ========================================
@@ -183,4 +200,5 @@ Summary of Changes:
 
 These changes will integrate Suna's billing system with deer-flow's 
 workflow execution, tracking usage for each workflow run.
-""") 
+"""
+)

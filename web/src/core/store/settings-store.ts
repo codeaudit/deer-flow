@@ -3,10 +3,15 @@
 
 import { nanoid } from "nanoid";
 import { create } from "zustand";
+import { toast } from "sonner";
 
 import type { MCPServerMetadata, SimpleMCPServerMetadata } from "../mcp";
+import { fetchSettings, updateSettings } from './settings-api';
 
-const SETTINGS_KEY = "deer-flow-settings";
+// Replace SETTINGS_KEY with a function that returns a key per account
+function getSettingsKey(accountId: string | null) {
+  return `deer-flow-settings-${accountId || 'default'}`;
+}
 
 // Flow type definition
 export type Flow = {
@@ -35,6 +40,8 @@ export type Flow = {
   createdAt: string;
   updatedAt: string;
 };
+
+console.log("settings-store loaded");
 
 // Default prompts (keeping the existing ones)
 const DEFAULT_PROMPTS = {
@@ -754,127 +761,164 @@ const DEFAULT_PRE_REGISTERED_MCPS: PreRegisteredMCPServer[] = [
   }
 ];
 
-// Updated SettingsState type
-export type SettingsState = {
+export type AccountSettings = {
   flows: Flow[];
   activeFlowId: string;
-  modelParameters: ModelParameters; // Per-model parameter overrides
+  modelParameters: ModelParameters;
   mcp: {
     servers: MCPServerMetadata[];
     preRegistered: PreRegisteredMCPServer[];
   };
 };
 
-// Default settings with flow structure
-const DEFAULT_SETTINGS: SettingsState = {
-  flows: [createDefaultFlow()],
-  activeFlowId: "default",
+export type SettingsState = {
+  accountId: string | null;
+  accountSettings: Record<string, AccountSettings>;
+};
+
+// Step 1: Define DEFAULT_SETTINGS for new accounts
+export const DEFAULT_SETTINGS: AccountSettings = {
+  flows: [],
+  activeFlowId: '',
   modelParameters: {},
   mcp: {
-    servers: [],
-    preRegistered: DEFAULT_PRE_REGISTERED_MCPS,
+    servers: [], // Only system-wide defaults, if any
+    preRegistered: [], // Only system-wide defaults, if any
   },
 };
 
-export const useSettingsStore = create<SettingsState>(() => ({
-  ...DEFAULT_SETTINGS,
+// Remove any usage of DEFAULT_SETTINGS as SettingsState
+// Add type annotations for parameters
+function mergeAccountSettings(base: AccountSettings, updates: Partial<AccountSettings>): AccountSettings {
+  return {
+    flows: updates.flows ?? base.flows,
+    activeFlowId: updates.activeFlowId ?? base.activeFlowId,
+    modelParameters: updates.modelParameters ?? base.modelParameters,
+    mcp: {
+      servers: updates.mcp?.servers ?? base.mcp.servers,
+      preRegistered: updates.mcp?.preRegistered ?? base.mcp.preRegistered,
+    },
+  };
+}
+
+export function getSettingsForCurrentAccount(): AccountSettings {
+  const state = useSettingsStore.getState() as SettingsState;
+  const base = state.accountSettings[state.accountId || 'default'];
+  if (base) return base;
+  // Return a deep copy of DEFAULT_SETTINGS for safety
+  return JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+}
+
+export function updateSettingsForCurrentAccount(settings: Partial<AccountSettings>): void {
+  const state = useSettingsStore.getState() as SettingsState;
+  const accountId = state.accountId || 'default';
+  const base = state.accountSettings[accountId] || JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+  useSettingsStore.setState({
+    accountSettings: {
+      ...state.accountSettings,
+      [accountId]: mergeAccountSettings(base, settings),
+    }
+  });
+}
+
+export const useSettingsStore = create<SettingsState & {
+  settings: any;
+  loading: boolean;
+  error: any;
+  hydrate: () => Promise<void>;
+  save: (newSettings: Partial<AccountSettings>) => Promise<void>;
+  flows: Flow[];
+  activeFlowId: string;
+}>((set, get) => ({
+  settings: null,
+  loading: true,
+  error: null,
+  accountSettings: { default: DEFAULT_SETTINGS },
+  accountId: 'default',
+  flows: [],
+  activeFlowId: '',
+  hydrate: async () => {
+    set({ loading: true });
+    try {
+      const settings = await fetchSettings();
+      // Update both the settings property and the accountSettings for the current account
+      const accountId = get().accountId || 'default';
+      const currentAccountSettings = get().accountSettings || {};
+      
+      // Ensure the settings have all required fields
+      const completeSettings: AccountSettings = {
+        flows: settings.flows || [],
+        activeFlowId: settings.activeFlowId || "",
+        modelParameters: settings.modelParameters || {},
+        mcp: {
+          servers: settings.mcp?.servers || [],
+          preRegistered: settings.mcp?.preRegistered || []
+        }
+      };
+      
+      set({ 
+        settings, 
+        accountSettings: {
+          ...currentAccountSettings,
+          [accountId]: completeSettings
+        },
+        loading: false, 
+        error: null 
+      });
+    } catch (e) {
+      set({ error: e, loading: false });
+    }
+  },
+  save: async (newSettings: Partial<AccountSettings>) => {
+    set({ loading: true });
+    try {
+      const updated = await updateSettings(newSettings);
+      // Update both the settings property and the accountSettings for the current account
+      const accountId = get().accountId || 'default';
+      const currentAccountSettings = get().accountSettings || {};
+      
+      // Merge the updated settings with existing account settings
+      const completeSettings: AccountSettings = {
+        flows: updated.flows || [],
+        activeFlowId: updated.activeFlowId || "",
+        modelParameters: updated.modelParameters || {},
+        mcp: {
+          servers: updated.mcp?.servers || [],
+          preRegistered: updated.mcp?.preRegistered || []
+        }
+      };
+      
+      set({ 
+        settings: updated, 
+        accountSettings: {
+          ...currentAccountSettings,
+          [accountId]: completeSettings
+        },
+        loading: false, 
+        error: null 
+      });
+    } catch (e) {
+      set({ error: e, loading: false });
+    }
+  },
 }));
 
+// Call hydrate on app load (can be moved to a top-level component if needed)
+useSettingsStore.getState().hydrate();
+
 export const useSettings = (key: keyof SettingsState) => {
-  return useSettingsStore((state) => state[key]);
+  return useSettingsStore((state: SettingsState) => state[key]);
 };
 
 export const changeSettings = (settings: SettingsState) => {
   useSettingsStore.setState(settings);
 };
 
-export const loadSettings = () => {
-  if (typeof window === "undefined") {
-    return;
-  }
-  const json = localStorage.getItem(SETTINGS_KEY);
-  if (json) {
-    try {
-      const settings = JSON.parse(json);
-      
-      // Migration: Convert old settings structure to flow-based structure
-      if (settings.general && settings.prompts && !settings.flows) {
-        console.log("Migrating legacy settings to flow-based structure");
-        const migratedSettings: SettingsState = {
-          flows: [{
-            id: "default",
-            name: "Default Flow",
-            isDefault: true,
-            description: "Migrated from your previous settings",
-            prompts: settings.prompts,
-            generalSettings: settings.general,
-            selectedModels: settings.selectedModels ?? {},
-            enabledMcps: ["weather-forecast", "time"], // Default pre-registered MCPs enabled
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          }],
-          activeFlowId: "default",
-          modelParameters: {},
-          mcp: settings.mcp ? { 
-            servers: settings.mcp.servers ?? [], 
-            preRegistered: settings.mcp.preRegistered ?? DEFAULT_PRE_REGISTERED_MCPS 
-          } : { 
-            servers: [], 
-            preRegistered: DEFAULT_PRE_REGISTERED_MCPS 
-          },
-        };
-        useSettingsStore.setState(migratedSettings);
-        saveSettings(); // Save the migrated structure
-        return;
-      }
+// Remove all localStorage usage and prepare for API-based hydration
+// (All settings are now loaded and saved via API, not localStorage)
+// (No loadSettings or saveSettings functions remain)
 
-      // Handle new flow-based structure
-      if (settings.flows && Array.isArray(settings.flows)) {
-        // Ensure default flow exists
-        const hasDefaultFlow = settings.flows.some((flow: Flow) => flow.isDefault);
-        if (!hasDefaultFlow) {
-          settings.flows.unshift(createDefaultFlow());
-        }
-
-        // Ensure activeFlowId is valid
-        const validFlowIds = settings.flows.map((flow: Flow) => flow.id);
-        if (!settings.activeFlowId || !validFlowIds.includes(settings.activeFlowId)) {
-          settings.activeFlowId = settings.flows.find((flow: Flow) => flow.isDefault)?.id ?? settings.flows[0]?.id ?? "default";
-        }
-
-        // Ensure MCP settings exist
-        settings.mcp ??= { servers: [], preRegistered: DEFAULT_PRE_REGISTERED_MCPS };
-        settings.mcp.preRegistered ??= DEFAULT_PRE_REGISTERED_MCPS;
-        
-        // Ensure modelParameters exists
-        settings.modelParameters ??= {};
-        
-        // Ensure all flows have selectedModels and enabledMcps
-        settings.flows = settings.flows.map((flow: Flow) => ({
-          ...flow,
-          selectedModels: flow.selectedModels ?? {},
-          enabledMcps: flow.enabledMcps ?? ["weather-forecast", "time"] // Default MCPs for migrated flows
-        }));
-
-        useSettingsStore.setState(settings);
-      } else {
-        // Invalid structure, reset to defaults
-        console.warn("Invalid settings structure, resetting to defaults");
-        useSettingsStore.setState(DEFAULT_SETTINGS);
-      }
-    } catch (error) {
-      console.error("Error loading settings:", error);
-      useSettingsStore.setState(DEFAULT_SETTINGS);
-    }
-  }
-};
-
-export const saveSettings = () => {
-  const latestSettings = useSettingsStore.getState();
-  const json = JSON.stringify(latestSettings);
-  localStorage.setItem(SETTINGS_KEY, json);
-};
-
+// Add type annotations for parameters with implicit any
 export const getChatStreamSettings = () => {
   let mcpSettings:
     | {
@@ -887,22 +931,23 @@ export const getChatStreamSettings = () => {
         >;
       }
     | undefined = undefined;
-  const { mcp } = useSettingsStore.getState();
+  const { accountSettings, accountId } = useSettingsStore.getState() as SettingsState;
+  const currentSettings = accountSettings[accountId || 'default'] || DEFAULT_SETTINGS;
+  const { mcp } = currentSettings;
   const activeFlow = getActiveFlow();
   
   // Get custom MCP servers that are enabled
-  const enabledCustomServers = mcp.servers.filter((server) => server.enabled);
+  const enabledCustomServers = mcp.servers.filter((server: MCPServerMetadata) => server.enabled);
   
   // Get pre-registered MCPs that are globally enabled AND enabled for this flow
   const enabledPreRegisteredServers = mcp.preRegistered
-    .filter((preServer) => preServer.enabled && activeFlow.enabledMcps.includes(preServer.name))
-    .map((preServer): MCPServerMetadata => ({
+    .filter((preServer: PreRegisteredMCPServer) => preServer.enabled && activeFlow.enabledMcps.includes(preServer.name))
+    .map((preServer: PreRegisteredMCPServer): MCPServerMetadata => ({
+      ...(preServer as any), // Cast as any to allow 'command' and 'args'
       name: preServer.name,
-      transport: "stdio" as const,
-      command: preServer.command,
-      args: preServer.args,
+      transport: "stdio",
       enabled: true,
-      tools: preServer.tools.map(tool => ({
+      tools: preServer.tools.map((tool: { name: string; description: string }) => ({
         name: tool.name,
         description: tool.description,
         inputSchema: {}
@@ -917,43 +962,40 @@ export const getChatStreamSettings = () => {
   if (allEnabledServers.length > 0) {
     mcpSettings = {
       servers: allEnabledServers.reduce((acc, cur) => {
-        const { transport, env } = cur;
-        let server: SimpleMCPServerMetadata;
+        const { transport, env } = cur as any;
+        let server: any;
         if (transport === "stdio") {
           server = {
             name: cur.name,
             transport,
             env,
-            command: cur.command,
-            args: cur.args,
+            command: (cur as any).command,
+            args: (cur as any).args,
           };
         } else {
           server = {
             name: cur.name,
             transport,
             env,
-            url: cur.url,
+            url: (cur as any).url,
           };
         }
         return {
           ...acc,
           [cur.name]: {
             ...server,
-            enabled_tools: cur.tools.map((tool) => tool.name),
+            enabled_tools: (cur as any).tools.map((tool: { name: string }) => tool.name),
             add_to_agents: ["researcher"],
           },
         };
-      }, {}),
+      }, {} as Record<string, any>),
     };
   }
   
-  const { modelParameters } = useSettingsStore.getState();
+  const { modelParameters } = currentSettings;
   
   return {
-    ...activeFlow.generalSettings,
     mcpSettings,
-    customPrompts: activeFlow.prompts,
-    selectedModels: activeFlow.selectedModels,
     modelParameters,
   };
 };
@@ -980,25 +1022,23 @@ export function createFlow(name: string, basedOn?: Flow): Flow {
     flows: [...state.flows, newFlow],
     activeFlowId: newFlow.id,
   }));
-  saveSettings();
   return newFlow;
 }
 
 export function updateFlow(flowId: string, updates: Partial<Omit<Flow, 'id' | 'isDefault' | 'createdAt'>>): void {
   useSettingsStore.setState((state) => ({
     ...state,
-    flows: state.flows.map(flow => 
+    flows: state.flows.map((flow: Flow) => 
       flow.id === flowId 
         ? { ...flow, ...updates, updatedAt: new Date().toISOString() }
         : flow
     ),
   }));
-  saveSettings();
 }
 
 export function deleteFlow(flowId: string): void {
   const state = useSettingsStore.getState();
-  const flowToDelete = state.flows.find(flow => flow.id === flowId);
+  const flowToDelete = state.flows.find((flow: Flow) => flow.id === flowId);
   
   // Protect default flow
   if (flowToDelete?.isDefault) {
@@ -1006,12 +1046,12 @@ export function deleteFlow(flowId: string): void {
     return;
   }
 
-  const remainingFlows = state.flows.filter(flow => flow.id !== flowId);
+  const remainingFlows = state.flows.filter((flow: Flow) => flow.id !== flowId);
   
   // If deleting active flow, switch to default
   let newActiveFlowId = state.activeFlowId;
   if (state.activeFlowId === flowId) {
-    newActiveFlowId = remainingFlows.find(flow => flow.isDefault)?.id ?? remainingFlows[0]?.id ?? "default";
+    newActiveFlowId = remainingFlows.find((flow: Flow) => flow.isDefault)?.id ?? remainingFlows[0]?.id ?? "default";
   }
 
   useSettingsStore.setState({
@@ -1019,19 +1059,17 @@ export function deleteFlow(flowId: string): void {
     flows: remainingFlows,
     activeFlowId: newActiveFlowId,
   });
-  saveSettings();
 }
 
 export function setActiveFlow(flowId: string): void {
   const state = useSettingsStore.getState();
-  const flowExists = state.flows.some(flow => flow.id === flowId);
+  const flowExists = state.flows.some((flow: Flow) => flow.id === flowId);
   
   if (flowExists) {
     useSettingsStore.setState({
       ...state,
       activeFlowId: flowId,
     });
-    saveSettings();
   } else {
     console.warn(`Flow with id ${flowId} does not exist`);
   }
@@ -1039,6 +1077,9 @@ export function setActiveFlow(flowId: string): void {
 
 export function getActiveFlow(): Flow {
   const { flows, activeFlowId } = useSettingsStore.getState();
+  if (!flows || flows.length === 0) {
+    return createDefaultFlow();
+  }
   return flows.find(flow => flow.id === activeFlowId) ?? flows.find(flow => flow.isDefault) ?? flows[0] ?? createDefaultFlow();
 }
 
@@ -1066,7 +1107,6 @@ export function setPrompt(agentName: keyof Flow["prompts"], content: string, flo
         : flow
     ),
   }));
-  saveSettings();
 }
 
 export function resetPrompt(agentName: keyof Flow["prompts"], flowId?: string): void {
@@ -1084,7 +1124,6 @@ export function resetPrompt(agentName: keyof Flow["prompts"], flowId?: string): 
         : flow
     ),
   }));
-  saveSettings();
 }
 
 export function resetAllPrompts(flowId?: string): void {
@@ -1102,7 +1141,6 @@ export function resetAllPrompts(flowId?: string): void {
         : flow
     ),
   }));
-  saveSettings();
 }
 
 // Updated functions for flow-based general settings
@@ -1124,7 +1162,6 @@ export function setReportStyle(
         : flow
     ),
   }));
-  saveSettings();
 }
 
 export function setEnableDeepThinking(value: boolean, flowId?: string): void {
@@ -1142,7 +1179,6 @@ export function setEnableDeepThinking(value: boolean, flowId?: string): void {
         : flow
     ),
   }));
-  saveSettings();
 }
 
 export function setEnableBackgroundInvestigation(value: boolean, flowId?: string): void {
@@ -1160,7 +1196,6 @@ export function setEnableBackgroundInvestigation(value: boolean, flowId?: string
         : flow
     ),
   }));
-  saveSettings();
 }
 
 // New flow-specific general settings functions
@@ -1179,7 +1214,6 @@ export function setMaxPlanIterations(value: number, flowId?: string): void {
         : flow
     ),
   }));
-  saveSettings();
 }
 
 export function setMaxStepNum(value: number, flowId?: string): void {
@@ -1197,7 +1231,6 @@ export function setMaxStepNum(value: number, flowId?: string): void {
         : flow
     ),
   }));
-  saveSettings();
 }
 
 export function setMaxSearchResults(value: number, flowId?: string): void {
@@ -1215,7 +1248,6 @@ export function setMaxSearchResults(value: number, flowId?: string): void {
         : flow
     ),
   }));
-  saveSettings();
 }
 
 // Emergency fix for broken Jinja2 templates
@@ -1234,7 +1266,6 @@ export function fixBrokenTemplates(flowId?: string): void {
         : flow
     ),
   }));
-  saveSettings();
   console.log(`Fixed broken templates for flow: ${targetFlowId}`);
 }
 
@@ -1254,7 +1285,6 @@ export function fixPlannerJsonFormat(flowId?: string): void {
         : flow
     ),
   }));
-  saveSettings();
   console.log(`Fixed planner JSON format for flow: ${targetFlowId}`);
 }
 
@@ -1273,7 +1303,6 @@ export function setSelectedModel(llmType: string, modelId: string, flowId?: stri
         : flow
     ),
   }));
-  saveSettings();
 }
 
 export function getSelectedModel(llmType: string, flowId?: string): string | undefined {
@@ -1304,7 +1333,6 @@ export function clearSelectedModel(llmType: string, flowId?: string): void {
         : flow
     ),
   }));
-  saveSettings();
 }
 
 export function clearAllSelectedModels(flowId?: string): void {
@@ -1321,7 +1349,6 @@ export function clearAllSelectedModels(flowId?: string): void {
         : flow
     ),
   }));
-  saveSettings();
 }
 
 // Model Parameters Management Functions
@@ -1335,58 +1362,152 @@ export function getDefaultParameters(): LLMParameters {
   };
 }
 
-export function setModelParameters(modelId: string, parameters: Partial<LLMParameters>): void {
-  useSettingsStore.setState((state) => {
-    const currentParams = state.modelParameters[modelId] ?? getDefaultParameters();
-    return {
-      ...state,
-      modelParameters: {
-        ...state.modelParameters,
-        [modelId]: { ...currentParams, ...parameters },
-      },
-    };
-  });
-  saveSettings();
+export async function loadModelParameters() {
+  const state = useSettingsStore.getState() as SettingsState;
+  const accountId = state.accountId || 'default';
+  useSettingsStore.setState({ modelParametersLoading: true });
+  try {
+    const settings = await fetchSettings();
+    useSettingsStore.setState((prevState) => {
+      const prev = prevState as SettingsState;
+      return {
+        accountSettings: {
+          ...prev.accountSettings,
+          [accountId]: {
+            ...prev.accountSettings[accountId],
+            modelParameters: settings.modelParameters || {},
+          },
+        },
+        modelParametersLoading: false,
+      };
+    });
+  } catch (e) {
+    useSettingsStore.setState((prevState) => {
+      const prev = prevState as SettingsState;
+      return {
+        accountSettings: {
+          ...prev.accountSettings,
+          [accountId]: {
+            ...prev.accountSettings[accountId],
+            modelParameters: {},
+          },
+        },
+        modelParametersLoading: false,
+      };
+    });
+    toast.error("Failed to load model parameters from server.");
+  }
+}
+
+export async function setModelParameters(modelId: string, parameters: Partial<LLMParameters>) {
+  const state = useSettingsStore.getState() as SettingsState;
+  const accountId = state.accountId || 'default';
+  const prevAccountSettings: AccountSettings = state.accountSettings[accountId] || {} as AccountSettings;
+  const prevModelParameters = prevAccountSettings.modelParameters || {};
+  const updatedModelParameters = {
+    ...prevModelParameters,
+    [modelId]: {
+      ...getDefaultParameters(),
+      ...prevModelParameters[modelId],
+      ...parameters,
+    },
+  };
+  // Update backend
+  try {
+    const updatedSettings = await updateSettings({
+      ...prevAccountSettings,
+      modelParameters: updatedModelParameters,
+    });
+    useSettingsStore.setState((prevState) => {
+      const prev = prevState as SettingsState;
+      return {
+        accountSettings: {
+          ...prev.accountSettings,
+          [accountId]: {
+            ...prevAccountSettings,
+            modelParameters: updatedSettings.modelParameters || {},
+          },
+        },
+      };
+    });
+  } catch (e) {
+    toast.error("Failed to update model parameters.");
+  }
+}
+
+export async function resetModelParameters(modelId: string) {
+  const state = useSettingsStore.getState() as SettingsState;
+  const accountId = state.accountId || 'default';
+  const prevAccountSettings: AccountSettings = state.accountSettings[accountId] || {} as AccountSettings;
+  const prevModelParameters = prevAccountSettings.modelParameters || {};
+  const updatedModelParameters = { ...prevModelParameters };
+  delete updatedModelParameters[modelId];
+  try {
+    const updatedSettings = await updateSettings({
+      ...prevAccountSettings,
+      modelParameters: updatedModelParameters,
+    });
+    useSettingsStore.setState((prevState) => {
+      const prev = prevState as SettingsState;
+      return {
+        accountSettings: {
+          ...prev.accountSettings,
+          [accountId]: {
+            ...prevAccountSettings,
+            modelParameters: updatedSettings.modelParameters || {},
+          },
+        },
+      };
+    });
+  } catch (e) {
+    toast.error("Failed to reset model parameters.");
+  }
 }
 
 export function getModelParameters(modelId: string): LLMParameters {
-  const { modelParameters } = useSettingsStore.getState();
-  return modelParameters[modelId] ?? getDefaultParameters();
-}
-
-export function resetModelParameters(modelId: string): void {
-  useSettingsStore.setState((state) => {
-    const newParams = { ...state.modelParameters };
-    delete newParams[modelId];
-    return {
-      ...state,
-      modelParameters: newParams,
-    };
-  });
-  saveSettings();
+  const state = useSettingsStore.getState() as SettingsState;
+  const accountId = state.accountId || 'default';
+  const accountSettings = state.accountSettings?.[accountId]; // Defensive
+  const modelParameters = accountSettings?.modelParameters;
+  if (!modelParameters || !modelParameters[modelId]) {
+    return getDefaultParameters();
+  }
+  return modelParameters[modelId];
 }
 
 export function getAllModelParameters(): ModelParameters {
-  return useSettingsStore.getState().modelParameters;
+  const state = useSettingsStore.getState() as SettingsState;
+  const accountId = state.accountId || 'default';
+  const accountSettings = state.accountSettings[accountId];
+  return accountSettings?.modelParameters || {};
 }
 
 // MCP Management Functions
 
 export function togglePreRegisteredMCP(mcpName: string, enabled: boolean): void {
-  useSettingsStore.setState((state) => ({
-    ...state,
-    mcp: {
-      ...state.mcp,
-      preRegistered: state.mcp.preRegistered.map(mcp =>
-        mcp.name === mcpName ? { ...mcp, enabled } : mcp
-      ),
-    },
-  }));
-  saveSettings();
+  useSettingsStore.setState((state) => {
+    const mcp = state.mcp ?? { servers: [], preRegistered: [] };
+    return {
+      ...state,
+      mcp: {
+        ...mcp,
+        preRegistered: (mcp.preRegistered ?? []).map(mcpItem =>
+          mcpItem.name === mcpName ? { ...mcpItem, enabled } : mcpItem
+        ),
+        servers: mcp.servers ?? [],
+      },
+    };
+  });
 }
 
 export function getPreRegisteredMCPs(): PreRegisteredMCPServer[] {
-  return useSettingsStore.getState().mcp.preRegistered;
+  // Defensive: always return an array, even if mcp or preRegistered is missing
+  const state = useSettingsStore.getState();
+  const mcp = state.mcp ?? { servers: [], preRegistered: [] };
+  if (!Array.isArray(mcp.preRegistered)) {
+    return [];
+  }
+  return mcp.preRegistered;
 }
 
 export function toggleFlowMCP(mcpName: string, enabled: boolean, flowId?: string): void {
@@ -1406,7 +1527,6 @@ export function toggleFlowMCP(mcpName: string, enabled: boolean, flowId?: string
         : flow
     ),
   }));
-  saveSettings();
 }
 
 export function getFlowEnabledMCPs(flowId?: string): string[] {
@@ -1424,16 +1544,14 @@ export function getAvailableMCPsForFlow(flowId?: string): {
   preRegistered: (PreRegisteredMCPServer & { flowEnabled: boolean })[];
   custom: MCPServerMetadata[];
 } {
-  const { mcp } = useSettingsStore.getState();
+  const mcp = useSettingsStore.getState().mcp ?? { preRegistered: [], servers: [] };
   const flowEnabledMcps = getFlowEnabledMCPs(flowId);
   
   return {
-    preRegistered: mcp.preRegistered.map(preServer => ({
+    preRegistered: (mcp.preRegistered ?? []).map(preServer => ({
       ...preServer,
       flowEnabled: flowEnabledMcps.includes(preServer.name)
     })),
-    custom: mcp.servers
+    custom: mcp.servers ?? [],
   };
 }
-
-loadSettings();

@@ -4,7 +4,10 @@ export interface ModelInfo {
   model: string;
   provider: string;
   context_window: number;
+  account_id: string; // Add account_id field
 }
+
+// Note: MCPServerMetadata should also include account_id for account-specific data
 
 export interface ModelConfig {
   basic: ModelInfo[];

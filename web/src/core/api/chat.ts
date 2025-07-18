@@ -11,6 +11,7 @@ import { sleep } from "../utils";
 
 import { resolveServiceURL } from "./resolve-service-url";
 import type { ChatEvent } from "./types";
+import { useAuth } from "@/components/auth/AuthProvider";
 
 export async function* chatStream(
   userMessage: string,
@@ -40,6 +41,13 @@ export async function* chatStream(
   },
   options: { abortSignal?: AbortSignal } = {},
 ) {
+  const { session } = useAuth();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (session?.access_token) {
+    headers["Authorization"] = `Bearer ${session.access_token}`;
+  }
   if (
     env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY ||
     location.search.includes("mock") ||
